@@ -214,6 +214,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="nav-btn" onclick="goPage('stats')">
       <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Statystyki
     </button>
+    <button class="nav-btn" onclick="goPage('budget')">
+      <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Limity / Budżet
+    </button>
+    <button class="nav-btn" onclick="goPage('goals')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Cele i oszczędności
+    </button>
+    <button class="nav-btn" onclick="goPage('plan')">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Plan roczny
+    </button>
     <button class="nav-btn" onclick="goPage('add')">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Dodaj / Import
     </button>
@@ -465,6 +474,154 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   </div>
 </div>
 
+
+<!-- BUDGET / LIMITS PAGE -->
+<div class="page" id="page-budget">
+  <div class="ph"><div class="ph-left"><h2>Limity budżetowe</h2><p id="bud-sub">Porównanie planu z wykonaniem</p></div></div>
+
+  <div class="mg mg-3" style="margin-bottom:18px">
+    <div class="mc"><div class="ml">Budżet łącznie</div><div class="mv b" id="bud-total-plan">—</div><div class="ms">suma limitów</div></div>
+    <div class="mc"><div class="ml">Wydano</div><div class="mv r" id="bud-spent">—</div><div class="ms" id="bud-spent-pct"></div></div>
+    <div class="mc"><div class="ml">Pozostało</div><div class="mv n" id="bud-left">—</div><div class="ms" id="bud-left-pct"></div></div>
+  </div>
+
+  <div class="g2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-p" style="padding-bottom:8px"><div class="sh"><h3>Plan vs Wykonanie</h3></div></div>
+      <div class="chart-wrap" style="height:240px;padding:0 18px 14px"><canvas id="chartBudget"></canvas></div>
+    </div>
+    <div class="card form-card" style="padding:18px">
+      <div class="sh"><h3>Ustaw limity kategorii</h3></div>
+      <div style="max-height:340px;overflow-y:auto" id="bud-limit-form"></div>
+      <div class="factions" style="margin-top:12px">
+        <button class="btn-p" onclick="saveLimits()">Zapisz limity</button>
+        <span class="fstatus" id="bud-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <div class="card-p" style="padding-bottom:4px"><div class="sh"><h3>Szczegóły wg kategorii</h3></div></div>
+    <div id="bud-cat-detail"></div>
+  </div>
+
+  <div class="card card-p" style="margin-top:16px;background:var(--amber-bg);border-color:rgba(183,119,13,.2)">
+    <div style="font-size:12px;color:var(--amber);line-height:1.7">
+      <strong>💡 Reguła 50/30/20</strong><br>
+      <strong>50% Potrzeby</strong> — żywność, paliwo, zdrowie, rachunki, edukacja<br>
+      <strong>30% Zachcianki</strong> — zakupy online, prezenty, subskrypcje, sport, hobby<br>
+      <strong>20% Oszczędności</strong> — pierwsza pozycja w budżecie, nie ostatnia
+    </div>
+    <div id="rule-503020" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- GOALS PAGE -->
+<div class="page" id="page-goals">
+  <div class="ph"><div class="ph-left"><h2>Cele oszczędnościowe</h2><p>Twoje finansowe cele i poduszka bezpieczeństwa</p></div>
+    <button class="btn-p" style="flex-shrink:0" onclick="showAddGoal()">+ Dodaj cel</button>
+  </div>
+
+  <div class="mg mg-3" style="margin-bottom:18px">
+    <div class="mc"><div class="ml">Wszystkie cele</div><div class="mv b" id="g-total-target">—</div><div class="ms">suma celów</div></div>
+    <div class="mc"><div class="ml">Odłożono łącznie</div><div class="mv g" id="g-total-saved">—</div><div class="ms" id="g-pct"></div></div>
+    <div class="mc"><div class="ml">Miesięczna rata</div><div class="mv p" id="g-monthly">—</div><div class="ms">potrzebna kwota</div></div>
+  </div>
+
+  <div id="goals-list" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px"></div>
+
+  <!-- Add goal form (hidden) -->
+  <div class="card form-card" id="goal-form" style="display:none;margin-bottom:16px">
+    <div class="sec-lbl">➕ Nowy cel oszczędnościowy</div>
+    <div class="frow">
+      <div class="fg"><label>Nazwa celu</label><input type="text" id="gf-name" placeholder="np. Wakacje Grecja 2027"></div>
+      <div class="fg"><label>Ikona</label>
+        <select id="gf-icon"><option>🎯</option><option>🏖️</option><option>🚗</option><option>🏠</option><option>🎓</option><option>💊</option><option>🛡️</option><option>📈</option><option>🎁</option><option>✈️</option><option>💻</option><option>👶</option></select>
+      </div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>Cel (zł)</label><input type="text" id="gf-target" placeholder="np. 8000"></div>
+      <div class="fg"><label>Odłożono już (zł)</label><input type="text" id="gf-saved" placeholder="np. 1500"></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>Termin (miesiąc i rok)</label><input type="text" id="gf-deadline" placeholder="np. Czerwiec 2027"></div>
+      <div class="fg"><label>Kategoria</label>
+        <select id="gf-cat">
+          <option>Poduszka finansowa</option><option>Wakacje</option><option>Auto</option>
+          <option>Mieszkanie</option><option>Edukacja</option><option>Emerytura</option>
+          <option>Prezenty/święta</option><option>Sprzęt/elektronika</option><option>Inne</option>
+        </select>
+      </div>
+    </div>
+    <div class="frow f1"><div class="fg"><label>Opis / notatka</label><input type="text" id="gf-note" placeholder="np. Hotel + loty dla 4 osób"></div></div>
+    <div class="factions">
+      <button class="btn-p" onclick="saveGoal()">Zapisz cel</button>
+      <button class="btn-s" onclick="hideGoalForm()">Anuluj</button>
+      <span class="fstatus" id="gf-status"></span>
+    </div>
+  </div>
+
+  <div class="card card-p" style="background:var(--blue-bg);border-color:rgba(26,95,168,.15)">
+    <div style="font-size:12px;color:var(--blue);line-height:1.7">
+      <strong>💡 Zasada „Płać najpierw sobie"</strong><br>
+      Oszczędności to <strong>pierwsza</strong> pozycja w budżecie — nie to, co zostaje na końcu miesiąca.<br>
+      <strong>Poduszka finansowa</strong> = 3–6 miesięcy kosztów życia (~20 000–40 000 zł)<br>
+      <strong>Fundusz nieregularny</strong> = ubezpieczenie, przeglądy, prezenty świąteczne — rozbij na 12 rat<br>
+      <strong>Cele długoterminowe</strong> = wakacje, wkład własny, emerytura
+    </div>
+  </div>
+</div>
+
+<!-- PLAN ROCZNY PAGE -->
+<div class="page" id="page-plan">
+  <div class="ph"><div class="ph-left"><h2>Plan roczny</h2><p>Prognoza i wydatki nieregularne 2026</p></div></div>
+
+  <div class="mg mg-4" style="margin-bottom:18px">
+    <div class="mc"><div class="ml">Roczny przychód (prognoza)</div><div class="mv g" id="plan-inc-yr">—</div></div>
+    <div class="mc"><div class="ml">Roczne wydatki (prognoza)</div><div class="mv r" id="plan-exp-yr">—</div></div>
+    <div class="mc"><div class="ml">Roczna nadwyżka</div><div class="mv n" id="plan-bal-yr">—</div></div>
+    <div class="mc"><div class="ml">Śr. miesięczne wydatki</div><div class="mv b" id="plan-avg">—</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-p" style="padding-bottom:8px"><div class="sh"><h3>Prognoza miesięczna — wydatki i przychody</h3></div></div>
+    <div class="chart-wrap" style="height:260px;padding:0 18px 14px"><canvas id="chartPlanYr"></canvas></div>
+  </div>
+
+  <div class="g2" style="margin-bottom:18px">
+    <div class="card" style="overflow:hidden">
+      <div class="card-p" style="padding-bottom:4px">
+        <div class="sh"><h3>Wydatki nieregularne — koperty</h3>
+          <button class="btn-s" style="font-size:11px;padding:4px 10px" onclick="showAddEnvelope()">+ Dodaj</button>
+        </div>
+      </div>
+      <div id="envelope-list"></div>
+      <div class="card form-card" id="env-form" style="display:none;border-top:1px solid var(--border)">
+        <div class="frow">
+          <div class="fg"><label>Nazwa</label><input type="text" id="ef-name" placeholder="np. Ubezpieczenie OC"></div>
+          <div class="fg"><label>Kwota roczna (zł)</label><input type="text" id="ef-amt" placeholder="np. 1200"></div>
+        </div>
+        <div class="frow">
+          <div class="fg"><label>Miesiąc płatności</label>
+            <select id="ef-month"><option>Styczeń</option><option>Luty</option><option>Marzec</option><option>Kwiecień</option><option>Maj</option><option>Czerwiec</option><option>Lipiec</option><option>Sierpień</option><option>Wrzesień</option><option>Październik</option><option>Listopad</option><option>Grudzień</option></select>
+          </div>
+          <div class="fg"><label>Ikona</label>
+            <select id="ef-icon"><option>🚗</option><option>🏠</option><option>🎁</option><option>✈️</option><option>📱</option><option>💊</option><option>📚</option><option>🔧</option><option>💡</option><option>🎓</option></select>
+          </div>
+        </div>
+        <div class="factions">
+          <button class="btn-p" onclick="saveEnvelope()">Zapisz</button>
+          <button class="btn-s" onclick="hideEnvForm()">Anuluj</button>
+        </div>
+      </div>
+    </div>
+    <div class="card card-p">
+      <div class="sh" style="margin-bottom:12px"><h3>Reguła 50/30/20 — plan roczny</h3></div>
+      <div id="plan-503020"></div>
+    </div>
+  </div>
+</div>
+
 </main>
 </div>
 
@@ -640,7 +797,7 @@ function goPage(p){
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('page-'+p).classList.add('active');
-  const pages = ['dashboard','income','expenses','transactions','stats','add'];
+  const pages = ['dashboard','income','expenses','transactions','stats','budget','goals','plan','add'];
   const nb = document.querySelectorAll('.nav-btn');
   const idx = pages.indexOf(p);
   if(idx>=0) nb[idx].classList.add('active');
@@ -652,6 +809,9 @@ function renderPage(){
   else if(curPage==='expenses') renderExpenses();
   else if(curPage==='transactions') renderTx();
   else if(curPage==='stats') renderStats();
+  else if(curPage==='budget') renderBudget();
+  else if(curPage==='goals') renderGoals();
+  else if(curPage==='plan') renderPlan();
 }
 
 // ═══════════════════════════════════════════════════
@@ -1142,6 +1302,338 @@ function doImport(){
   statusEl.className='fstatus';
   setTimeout(()=>{ statusEl.textContent=''; },6000);
 }
+
+
+// ═══════════════════════════════════════════════════
+// BUDGET LIMITS
+// ═══════════════════════════════════════════════════
+const DEFAULT_LIMITS = {
+  'Spożywcze':1500,'Paliwo':500,'Jedzenie poza domem':300,'Zakupy online':400,
+  'Sport i hobby':300,'Edukacja':300,'Dom i mieszkanie':400,'Zdrowie':300,
+  'Subskrypcje':200,'Kosmetyki':200,'Telefon/TV/internet':200,'Opłaty bankowe':100,
+  'Transport/parking':100,'Telefon dziecka':200,'Koszty firmowe':500,
+  'Prezenty/różne':300,'Inne':200
+};
+
+function getLimits(){ return JSON.parse(localStorage.getItem('budzet_limits')||'null') || {...DEFAULT_LIMITS}; }
+function setLimits(l){ localStorage.setItem('budzet_limits', JSON.stringify(l)); }
+
+function renderBudget(){
+  const limits = getLimits();
+  const {tx,exp,sorted} = mdata(curMonth);
+  document.getElementById('bud-sub').textContent = curMonth;
+
+  const totalPlan = Object.values(limits).reduce((s,v)=>s+v,0);
+  const pct = totalPlan>0?(exp/totalPlan*100).toFixed(0):0;
+  const left = totalPlan - exp;
+  document.getElementById('bud-total-plan').textContent = fmt(totalPlan);
+  document.getElementById('bud-spent').textContent = fmt(exp);
+  document.getElementById('bud-spent-pct').textContent = pct+'% budżetu';
+  document.getElementById('bud-left').textContent = fmt(Math.abs(left));
+  document.getElementById('bud-left').className = 'mv '+(left>=0?'g':'r');
+  document.getElementById('bud-left-pct').textContent = left>=0?'wolnych środków':'PRZEKROCZONO';
+
+  // Chart: plan vs actual
+  destroyChart('budget');
+  const catKeys = [...new Set([...Object.keys(limits),...sorted.map(([c])=>c)])];
+  const catData = catKeys.map(c=>({cat:c,plan:limits[c]||0,actual:Math.abs(sorted.find(([cc])=>cc===c)?.[1]||0)}));
+  const filtered = catData.filter(d=>d.plan>0||d.actual>0).sort((a,b)=>b.actual-a.actual).slice(0,10);
+  charts['budget'] = new Chart(document.getElementById('chartBudget'),{
+    type:'bar',
+    data:{
+      labels:filtered.map(d=>d.cat),
+      datasets:[
+        {label:'Plan',data:filtered.map(d=>d.plan),backgroundColor:'#378ADD55',borderWidth:0,borderRadius:4},
+        {label:'Wydano',data:filtered.map(d=>d.actual),backgroundColor:filtered.map(d=>d.actual>d.plan?'#E24B4Acc':'#1D9E7599'),borderWidth:0,borderRadius:4}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:10}}},scales:{x:{ticks:{font:{size:10},maxRotation:30}},y:{ticks:{callback:v=>v+'zł',font:{size:11}}}}}
+  });
+
+  // Limit form
+  const expCats = [...new Set([...Object.keys(DEFAULT_LIMITS),...sorted.map(([c])=>c)])];
+  document.getElementById('bud-limit-form').innerHTML = expCats.map(cat=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--border)">
+      <span style="flex:1;font-size:12.5px">${CAT_EMOJI[cat]||'•'} ${cat}</span>
+      <input type="number" id="lim-${cat.replace(/\//g,'_').replace(/\s/g,'_')}" value="${limits[cat]||''}" placeholder="0"
+        style="width:90px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+      <span style="font-size:11px;color:var(--text3);min-width:16px">zł</span>
+    </div>`).join('');
+
+  // Category detail with progress bars
+  const allCats = [...new Set([...Object.keys(limits),...sorted.map(([c])=>c)])].filter(c=>limits[c]>0||sorted.find(([cc])=>cc===c));
+  document.getElementById('bud-cat-detail').innerHTML = allCats.map(cat=>{
+    const plan = limits[cat]||0;
+    const actual = Math.abs(sorted.find(([c])=>c===cat)?.[1]||0);
+    const pctBar = plan>0?Math.min(actual/plan*100,100).toFixed(0):100;
+    const over = actual>plan && plan>0;
+    const color = over?'var(--red)':actual/plan>0.8?'var(--amber)':'var(--green)';
+    return `<div class="cat-row">
+      <div class="ci" style="background:${CAT_COLORS[cat]||'#9b9b95'}1a">${CAT_EMOJI[cat]||'•'}</div>
+      <span class="cn">${cat}</span>
+      <div style="flex:1;margin:0 10px">
+        <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+          <div style="width:${pctBar}%;height:100%;background:${color};border-radius:3px;transition:width .4s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:3px">
+          <span style="color:${color}">${actual.toFixed(0)} zł</span>
+          <span>${plan>0?'limit: '+plan+' zł':'brak limitu'}</span>
+        </div>
+      </div>
+      <span style="font-size:12px;font-weight:500;min-width:70px;text-align:right;color:${color}">${plan>0?(over?'▲ +'+(actual-plan).toFixed(0):'✓ '+(plan-actual).toFixed(0)+' zł'):'—'}</span>
+    </div>`;
+  }).join('');
+
+  // 50/30/20
+  render503020('rule-503020');
+}
+
+function saveLimits(){
+  const limits = {};
+  const expCats = [...new Set([...Object.keys(DEFAULT_LIMITS)])];
+  expCats.forEach(cat=>{
+    const id='lim-'+cat.replace(/\//g,'_').replace(/\s/g,'_');
+    const el=document.getElementById(id);
+    if(el){ const v=parseFloat(el.value); if(!isNaN(v)&&v>0) limits[cat]=v; }
+  });
+  setLimits(limits);
+  document.getElementById('bud-status').textContent='✓ Zapisano';
+  setTimeout(()=>document.getElementById('bud-status').textContent='',2000);
+  renderBudget();
+}
+
+function render503020(elId){
+  const {inc,exp,sorted} = mdata(curMonth);
+  const needsCats=['Spożywcze','Paliwo','Zdrowie','Edukacja','Dom i mieszkanie','Telefon/TV/internet','Opłaty bankowe','Transport/parking'];
+  const wantsCats=['Zakupy online','Prezenty/różne','Sport i hobby','Subskrypcje','Kosmetyki','Jedzenie poza domem','Telefon dziecka'];
+  const needs = Math.abs(sorted.filter(([c])=>needsCats.includes(c)).reduce((s,[,a])=>s+a,0));
+  const wants = Math.abs(sorted.filter(([c])=>wantsCats.includes(c)).reduce((s,[,a])=>s+a,0));
+  const savings = 0; // from goals
+  const targetNeeds=inc*0.5, targetWants=inc*0.3, targetSavings=inc*0.2;
+  const rows=[
+    {label:'🏠 Potrzeby (50%)',actual:needs,target:targetNeeds,color:'#1D9E75'},
+    {label:'🎁 Zachcianki (30%)',actual:wants,target:targetWants,color:'#378ADD'},
+    {label:'💰 Oszczędności (20%)',actual:savings,target:targetSavings,color:'#8B5CF6'},
+  ];
+  const el=document.getElementById(elId);
+  if(!el) return;
+  el.innerHTML=rows.map(r=>{
+    const pct=r.target>0?(r.actual/r.target*100).toFixed(0):0;
+    const over=r.actual>r.target&&r.target>0;
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span>${r.label}</span>
+        <span style="color:${over?'var(--red)':'var(--text2)'}">${r.actual.toFixed(0)} / ${r.target.toFixed(0)} zł ${over?'⚠️':''}</span>
+      </div>
+      <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden">
+        <div style="width:${Math.min(pct,100)}%;height:100%;background:${over?'var(--red)':r.color};border-radius:4px;transition:width .4s"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+// GOALS
+// ═══════════════════════════════════════════════════
+function getGoals(){ return JSON.parse(localStorage.getItem('budzet_goals')||'[]'); }
+function saveGoalsData(g){ localStorage.setItem('budzet_goals',JSON.stringify(g)); }
+
+const DEFAULT_GOALS = [
+  {id:1,name:'Poduszka finansowa',icon:'🛡️',target:25000,saved:2000,deadline:'Grudzień 2026',cat:'Poduszka finansowa',note:'3 miesiące kosztów życia'},
+  {id:2,name:'Wakacje — rodzinne',icon:'🏖️',target:8000,saved:500,deadline:'Lipiec 2027',cat:'Wakacje',note:'4 osoby, 2 tygodnie'},
+  {id:3,name:'Fundusz nieregularny',icon:'🔧',target:5000,saved:0,deadline:'Grudzień 2026',cat:'Inne',note:'Ubezpieczenie, przeglądy, naprawy'},
+];
+
+function renderGoals(){
+  const goals = getGoals().length ? getGoals() : DEFAULT_GOALS;
+  const totalTarget = goals.reduce((s,g)=>s+g.target,0);
+  const totalSaved = goals.reduce((s,g)=>s+g.saved,0);
+  const pct = totalTarget>0?(totalSaved/totalTarget*100).toFixed(0):0;
+  // Estimate monthly needed (rough)
+  const monthly = goals.reduce((s,g)=>{
+    const remaining = g.target - g.saved;
+    if(remaining<=0) return s;
+    const dl = g.deadline;
+    const parts = dl ? dl.split(' ') : null;
+    if(!parts||parts.length<2) return s+remaining/12;
+    const mIdx2 = MONTHS_PL.indexOf(parts[0]);
+    const yr = parseInt(parts[1]);
+    const now = new Date();
+    const months = Math.max(1,(yr-now.getFullYear())*12+(mIdx2-now.getMonth()));
+    return s+remaining/months;
+  },0);
+
+  document.getElementById('g-total-target').textContent = fmt(totalTarget);
+  document.getElementById('g-total-saved').textContent = fmt(totalSaved);
+  document.getElementById('g-pct').textContent = pct+'% realizacji';
+  document.getElementById('g-monthly').textContent = fmt(monthly);
+
+  document.getElementById('goals-list').innerHTML = goals.map((g,i)=>{
+    const pct2 = g.target>0?Math.min(g.saved/g.target*100,100).toFixed(0):0;
+    const remaining = g.target-g.saved;
+    const color = pct2>=100?'var(--green)':pct2>=50?'var(--blue)':'var(--amber)';
+    return `<div class="card card-p" style="position:relative">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="font-size:24px">${g.icon}</span>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:600">${g.name}</div>
+          <div style="font-size:11px;color:var(--text3)">${g.cat} · termin: ${g.deadline||'—'}</div>
+        </div>
+        <button onclick="deleteGoal(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:4px" title="Usuń">×</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+        <span style="color:var(--green);font-weight:500">${fmt(g.saved)} odłożono</span>
+        <span style="color:var(--text2)">cel: ${fmt(g.target)}</span>
+      </div>
+      <div style="height:10px;background:var(--bg3);border-radius:5px;overflow:hidden;margin-bottom:6px">
+        <div style="width:${pct2}%;height:100%;background:${color};border-radius:5px;transition:width .5s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3)">
+        <span>${pct2}% zrealizowane</span>
+        <span>brakuje: <strong style="color:var(--text)">${fmt(remaining)}</strong></span>
+      </div>
+      ${g.note?`<div style="font-size:11px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border)">${g.note}</div>`:''}
+      <div style="margin-top:10px;display:flex;gap:6px">
+        <input type="number" placeholder="Dodaj kwotę..." id="dep-${i}"
+          style="flex:1;padding:5px 9px;border:1px solid var(--border2);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px">
+        <button onclick="depositGoal(${i})" class="btn-p" style="padding:5px 12px;font-size:12px">+ Wpłać</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showAddGoal(){ document.getElementById('goal-form').style.display='block'; }
+function hideGoalForm(){ document.getElementById('goal-form').style.display='none'; }
+
+function saveGoal(){
+  const name=document.getElementById('gf-name').value.trim();
+  const icon=document.getElementById('gf-icon').value;
+  const target=parseFloat(document.getElementById('gf-target').value)||0;
+  const saved=parseFloat(document.getElementById('gf-saved').value)||0;
+  const deadline=document.getElementById('gf-deadline').value.trim();
+  const cat=document.getElementById('gf-cat').value;
+  const note=document.getElementById('gf-note').value.trim();
+  const st=document.getElementById('gf-status');
+  if(!name||target<=0){ st.textContent='Wypełnij nazwę i cel.'; st.className='fstatus err'; return; }
+  const goals=getGoals().length?getGoals():[...DEFAULT_GOALS];
+  goals.push({id:Date.now(),name,icon,target,saved,deadline,cat,note});
+  saveGoalsData(goals);
+  hideGoalForm();
+  renderGoals();
+}
+
+function deleteGoal(idx){
+  if(!confirm('Usunąć ten cel?')) return;
+  const goals=getGoals().length?getGoals():[...DEFAULT_GOALS];
+  goals.splice(idx,1); saveGoalsData(goals); renderGoals();
+}
+
+function depositGoal(idx){
+  const val=parseFloat(document.getElementById('dep-'+idx).value);
+  if(isNaN(val)||val<=0) return;
+  const goals=getGoals().length?getGoals():[...DEFAULT_GOALS];
+  goals[idx].saved+=val; saveGoalsData(goals); renderGoals();
+}
+
+// ═══════════════════════════════════════════════════
+// PLAN ROCZNY
+// ═══════════════════════════════════════════════════
+function getEnvelopes(){ return JSON.parse(localStorage.getItem('budzet_env')||'null') || [
+  {name:'Ubezpieczenie OC/AC',icon:'🚗',amt:2400,month:'Listopad'},
+  {name:'Przegląd techniczny',icon:'🔧',amt:300,month:'Marzec'},
+  {name:'Prezenty świąteczne',icon:'🎁',amt:1500,month:'Grudzień'},
+  {name:'Wakacje letnie',icon:'✈️',amt:8000,month:'Lipiec'},
+]; }
+function saveEnvelopes(e){ localStorage.setItem('budzet_env',JSON.stringify(e)); }
+
+function renderPlan(){
+  const months2 = getMonths();
+  // Avg based on real data
+  const avgExp = months2.length ? months2.reduce((s,m)=>s+mdata(m).exp,0)/months2.length : 5000;
+  const avgInc = months2.length ? months2.reduce((s,m)=>s+mdata(m).inc,0)/months2.length : 14000;
+  const yrExp = avgExp*12, yrInc = avgInc*12;
+  document.getElementById('plan-inc-yr').textContent = fmt(yrInc);
+  document.getElementById('plan-exp-yr').textContent = fmt(yrExp);
+  const planBal = document.getElementById('plan-bal-yr');
+  planBal.textContent = fmt(yrInc-yrExp,true);
+  planBal.className = 'mv '+(yrInc>=yrExp?'g':'r');
+  document.getElementById('plan-avg').textContent = fmt(avgExp);
+
+  // Year chart
+  const allMths = MONTHS_PL;
+  const existingData = {};
+  months2.forEach(m=>{ const [mn,yr]=m.split(' '); existingData[mn]={...mdata(m)}; });
+  destroyChart('planyr');
+  charts['planyr'] = new Chart(document.getElementById('chartPlanYr'),{
+    type:'bar',
+    data:{
+      labels:allMths,
+      datasets:[
+        {label:'Wydatki (rzeczywiste)',data:allMths.map(m=>existingData[m]?Math.round(existingData[m].exp*100)/100:null),backgroundColor:'#E24B4A99',borderWidth:0,borderRadius:4,spanGaps:false},
+        {label:'Wydatki (prognoza)',data:allMths.map(m=>existingData[m]?null:Math.round(avgExp)),backgroundColor:'#E24B4A33',borderWidth:0,borderRadius:4,borderDash:[4,4]},
+        {label:'Przychody (rzeczywiste)',data:allMths.map(m=>existingData[m]?Math.round(existingData[m].inc*100)/100:null),backgroundColor:'#1D9E7599',borderWidth:0,borderRadius:4},
+        {label:'Przychody (prognoza)',data:allMths.map(m=>existingData[m]?null:Math.round(avgInc)),backgroundColor:'#1D9E7533',borderWidth:0,borderRadius:4},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:10}}},scales:{x:{ticks:{font:{size:11}}},y:{ticks:{callback:v=>Math.round(v/1000)+'k',font:{size:11}}}}}
+  });
+
+  // Envelopes
+  const envs = getEnvelopes();
+  const totalEnv = envs.reduce((s,e)=>s+e.amt,0);
+  const monthly = totalEnv/12;
+  document.getElementById('envelope-list').innerHTML = envs.length
+    ? `<div style="padding:8px 18px 4px;font-size:11px;color:var(--text3)">Łącznie: ${fmt(totalEnv)} rocznie · Odkładaj co mies.: <strong style="color:var(--amber)">${fmt(monthly)}</strong></div>`
+    + envs.map((e,i)=>`
+      <div class="cat-row">
+        <div class="ci" style="background:var(--amber-bg)">${e.icon}</div>
+        <span class="cn">${e.name}</span>
+        <span style="font-size:11px;color:var(--text3)">${e.month}</span>
+        <span class="ca" style="color:var(--amber)">${fmt(e.amt)}</span>
+        <span style="font-size:11px;color:var(--text3);min-width:80px;text-align:right">~${fmt(e.amt/12)}/mies.</span>
+        <button onclick="delEnv(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;margin-left:4px" title="Usuń">×</button>
+      </div>`).join('')
+    : '<div class="tx-empty">Brak kopert. Dodaj nieregularne wydatki.</div>';
+
+  // 50/30/20 roczne
+  const {inc,exp,sorted} = mdata(curMonth);
+  const el=document.getElementById('plan-503020');
+  if(el){
+    const yInc=avgInc*12;
+    const rows503020=[
+      {label:'🏠 Potrzeby (50%)',target:yInc*0.5,note:'żywność, rachunki, paliwo, zdrowie'},
+      {label:'🎁 Zachcianki (30%)',target:yInc*0.3,note:'zakupy, rozrywka, hobby'},
+      {label:'💰 Oszczędności (20%)',target:yInc*0.2,note:'inwestycje, poduszka, cele'},
+    ];
+    el.innerHTML = rows503020.map(r=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
+        <div>
+          <div style="font-size:13px;font-weight:500">${r.label}</div>
+          <div style="font-size:11px;color:var(--text3)">${r.note}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">${fmt(r.target)}</div>
+          <div style="font-size:11px;color:var(--text3)">${fmt(r.target/12)}/mies.</div>
+        </div>
+      </div>`).join('');
+  }
+}
+
+function showAddEnvelope(){ document.getElementById('env-form').style.display='block'; }
+function hideEnvForm(){ document.getElementById('env-form').style.display='none'; }
+function saveEnvelope(){
+  const name=document.getElementById('ef-name').value.trim();
+  const amt=parseFloat(document.getElementById('ef-amt').value)||0;
+  const month=document.getElementById('ef-month').value;
+  const icon=document.getElementById('ef-icon').value;
+  if(!name||amt<=0) return;
+  const envs=getEnvelopes();
+  envs.push({name,icon,amt,month});
+  saveEnvelopes(envs);
+  hideEnvForm();
+  renderPlan();
+}
+function delEnv(i){ const envs=getEnvelopes(); envs.splice(i,1); saveEnvelopes(envs); renderPlan(); }
 
 // ═══════════════════════════════════════════════════
 // THEME
