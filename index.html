@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budżet domowy</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f7f6f3; --bg3: #f0efe9;
+    --text: #1a1a18; --text2: #6b6a65; --text3: #9b9a96;
+    --border: rgba(0,0,0,0.1); --border2: rgba(0,0,0,0.18);
+    --green: #3B6D11; --green-bg: #EAF3DE;
+    --red: #A32D2D; --red-bg: #FCEBEB;
+    --blue: #185FA5; --blue-bg: #E6F1FB;
+    --amber: #854F0B; --amber-bg: #FAEEDA;
+    --purple: #534AB7; --purple-bg: #EEEDFE;
+    --pink: #993556; --pink-bg: #FBEAF0;
+    --teal: #085041; --teal-bg: #E1F5EE;
+    --gray: #5F5E5A; --gray-bg: #F1EFE8;
+    --radius: 10px; --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a; --bg2: #242422; --bg3: #2c2c2a;
+      --text: #f0efe9; --text2: #a8a7a2; --text3: #6b6a65;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.18);
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg3); color: var(--text); min-height: 100vh; }
+
+  .app { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+
+  /* API KEY SETUP */
+  .setup-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
+  .setup-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .setup-card p { font-size: 13px; color: var(--text2); margin-bottom: 12px; line-height: 1.5; }
+  .key-row { display: flex; gap: 8px; }
+  .key-row input { flex: 1; padding: 8px 12px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text); font-size: 13px; font-family: monospace; }
+  .key-row input:focus { outline: none; border-color: var(--blue); }
+  .key-status { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); }
+  .dot.ok { background: var(--green); }
+  .dot.err { background: var(--red); }
+  .link { color: var(--blue); text-decoration: none; font-size: 12px; }
+  .link:hover { text-decoration: underline; }
+
+  /* HEADER */
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .header p { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 2px; background: var(--bg2); border-radius: var(--radius); padding: 4px; margin-bottom: 20px; }
+  .tab { flex: 1; padding: 8px 12px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--text2); border-radius: 7px; transition: all .15s; }
+  .tab.on { background: var(--bg); color: var(--text); box-shadow: var(--shadow); }
+
+  /* PANEL */
+  .panel { display: none; } .panel.on { display: block; }
+
+  /* UPLOAD */
+  .upload-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .dropzone { border: 2px dashed var(--border2); border-radius: var(--radius); padding: 40px 20px; text-align: center; cursor: pointer; transition: all .15s; background: var(--bg2); }
+  .dropzone:hover, .dropzone.drag { border-color: var(--blue); background: var(--blue-bg); }
+  .dropzone svg { width: 40px; height: 40px; stroke: var(--text3); margin-bottom: 12px; }
+  .dropzone p { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .dropzone span { font-size: 13px; color: var(--text2); }
+  #file-input { display: none; }
+  .preview-img { width: 100%; max-height: 220px; object-fit: contain; border-radius: var(--radius-sm); margin-top: 14px; border: 1px solid var(--border); }
+
+  /* SPINNER */
+  .spinner-wrap { text-align: center; padding: 32px; background: var(--bg2); border-radius: var(--radius); margin-top: 12px; }
+  .spinner { width: 32px; height: 32px; border: 3px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner-msg { font-size: 14px; color: var(--text2); }
+  .spinner-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+  /* RESULTS */
+  .res-header { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 10px; }
+  .res-header h3 { font-size: 15px; font-weight: 600; }
+  .res-totals { display: flex; gap: 12px; font-size: 13px; }
+  .tot-out { color: var(--red); font-weight: 600; }
+  .tot-in { color: var(--green); font-weight: 600; }
+
+  .tx-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--bg); }
+  .tx-row { display: grid; grid-template-columns: 88px 1fr auto auto; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .tx-row:last-child { border-bottom: none; }
+  .tx-row:hover { background: var(--bg2); }
+  .tx-date { color: var(--text2); font-size: 12px; }
+  .tx-name { color: var(--text); }
+  .tx-cat { font-size: 11px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; font-weight: 500; }
+  .tx-amt { font-weight: 600; text-align: right; white-space: nowrap; }
+  .tx-amt.out { color: var(--red); }
+  .tx-amt.in { color: var(--green); }
+
+  .cat-Spożywcze       { background: var(--green-bg); color: var(--green); }
+  .cat-Restauracje     { background: var(--pink-bg);  color: var(--pink); }
+  .cat-Transport       { background: var(--teal-bg);  color: var(--teal); }
+  .cat-Paliwo          { background: var(--amber-bg); color: var(--amber); }
+  .cat-Rachunki        { background: var(--blue-bg);  color: var(--blue); }
+  .cat-Zdrowie         { background: var(--red-bg);   color: var(--red); }
+  .cat-Rozrywka        { background: var(--amber-bg); color: var(--amber); }
+  .cat-Zakupy-online   { background: var(--purple-bg);color: var(--purple); }
+  .cat-Odzież          { background: var(--pink-bg);  color: var(--pink); }
+  .cat-Przychód        { background: var(--green-bg); color: var(--green); }
+  .cat-Inne            { background: var(--gray-bg);  color: var(--gray); }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); transition: all .15s; }
+  .btn:hover { background: var(--bg2); }
+  .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .btn.primary:hover { opacity: .85; }
+  .btn.full { width: 100%; justify-content: center; margin-top: 12px; }
+
+  /* ERROR */
+  .err-box { background: var(--red-bg); border: 1px solid rgba(163,45,45,.2); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 13px; color: var(--red); margin-top: 12px; line-height: 1.5; }
+
+  /* SUMMARY */
+  .met-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .met { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .met .lbl { font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+  .met .val { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+  .met .sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
+
+  .chart-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+  .bar-row { display: grid; grid-template-columns: 130px 1fr 90px; gap: 10px; align-items: center; margin-bottom: 12px; font-size: 13px; }
+  .bar-label { color: var(--text2); text-align: right; }
+  .bar-track { background: var(--bg2); border-radius: 4px; height: 10px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width .7s ease; }
+  .bar-amt { color: var(--text); font-weight: 600; text-align: right; }
+
+  /* HISTORY */
+  .hist-list { display: flex; flex-direction: column; gap: 8px; }
+  .hist-item { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; }
+  .hist-ico { width: 40px; height: 40px; border-radius: 50%; background: var(--bg2); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .hist-name { font-size: 14px; font-weight: 600; }
+  .hist-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .hist-amt { font-size: 15px; font-weight: 700; }
+
+  .empty { text-align: center; padding: 48px 20px; color: var(--text2); }
+  .empty .ico { font-size: 40px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; }
+
+  /* TOAST */
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px); background: var(--text); color: var(--bg); padding: 10px 20px; border-radius: 20px; font-size: 13px; font-weight: 500; opacity: 0; transition: all .25s; pointer-events: none; white-space: nowrap; z-index: 999; }
+  #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* MONTH SELECTOR */
+  .month-row { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+  .month-row label { font-size: 13px; color: var(--text2); }
+  .month-row input { padding: 6px 10px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div>
+      <h1>🏠 Budżet domowy</h1>
+      <p>Wgraj screenshot z banku — AI przypisze kategorie automatycznie</p>
+    </div>
+  </div>
+
+  <!-- API KEY SETUP -->
+  <div class="setup-card" id="setup-card">
+    <h2>🔑 Klucz API Anthropic</h2>
+    <p>Wymagany do analizy screenshotów przez AI. Klucz jest przechowywany tylko lokalnie w przeglądarce (localStorage) i nigdzie nie jest wysyłany poza Anthropic API.<br>
+    Uzyskaj klucz bezpłatnie: <a class="link" href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com → API Keys</a></p>
+    <div class="key-row">
+      <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." autocomplete="off">
+      <button class="btn primary" onclick="saveKey()">Zapisz</button>
+      <button class="btn" onclick="toggleKeyVisible()">Pokaż</button>
+    </div>
+    <div class="key-status">
+      <div class="dot" id="key-dot"></div>
+      <span id="key-label" style="color:var(--text2);">Brak klucza</span>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab on" onclick="sw('scan')">📷 Skanuj</button>
+    <button class="tab" onclick="sw('sum')">📊 Podsumowanie</button>
+    <button class="tab" onclick="sw('hist')">🗂 Historia</button>
+    <button class="tab" onclick="sw('settings')">⚙️ Ustawienia</button>
+  </div>
+
+  <!-- SCAN TAB -->
+  <div id="p-scan" class="panel on">
+    <div class="upload-card">
+      <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()" ondragover="onDrag(event,1)" ondragleave="onDrag(event,0)" ondrop="onDrop(event)">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/><circle cx="16" cy="6" r="1" fill="currentColor"/>
+        </svg>
+        <p>Wgraj screenshot z konta bankowego</p>
+        <span>Kliknij lub przeciągnij plik · JPG, PNG, WebP</span>
+      </div>
+      <input type="file" id="file-input" accept="image/*" onchange="handleFile(this.files[0])">
+      <img id="img-preview" class="preview-img" style="display:none;">
+    </div>
+
+    <div id="spinner-box" style="display:none;" class="spinner-wrap">
+      <div class="spinner"></div>
+      <p class="spinner-msg">AI analizuje screenshot...</p>
+      <p class="spinner-sub" id="spin-msg">Odczytuję transakcje</p>
+    </div>
+
+    <div id="err-box"></div>
+    <div id="res-zone"></div>
+  </div>
+
+  <!-- SUMMARY TAB -->
+  <div id="p-sum" class="panel">
+    <div class="month-row">
+      <label>Miesiąc:</label>
+      <input type="month" id="month-filter" onchange="renderSum()">
+      <button class="btn" onclick="document.getElementById('month-filter').value='';renderSum()">Wszystkie</button>
+    </div>
+    <div id="sum-content"></div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div id="p-hist" class="panel">
+    <div id="hist-content"></div>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div id="p-settings" class="panel">
+    <div class="upload-card">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">Zarządzanie danymi</h3>
+      <button class="btn full" onclick="exportData()">⬇️ Eksportuj dane (JSON)</button>
+      <button class="btn full" style="margin-top:8px;color:var(--red);border-color:var(--red);" onclick="clearAll()">🗑 Usuń wszystkie dane</button>
+      <p style="font-size:12px;color:var(--text3);margin-top:14px;line-height:1.6;">Dane przechowywane lokalnie w przeglądarce. Eksportuj regularnie jako backup.</p>
+    </div>
+    <div class="upload-card" style="margin-top:12px;">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:12px;">Dodaj transakcje ręcznie</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <input type="text" id="m-name" placeholder="Nazwa (np. Biedronka)" style="padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-size:13px;">
+        <input type="number" id="m-price" placeholder="Kwota (np. -45.90)" step="0.01" style="padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-size:13px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <input type="date" id="m-date" style="padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-size:13px;">
+        <select id="m-cat" style="padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-size:13px;">
+          <option>Spożywcze</option><option>Restauracje</option><option>Transport</option>
+          <option>Paliwo</option><option>Rachunki</option><option>Zdrowie</option>
+          <option>Rozrywka</option><option>Zakupy online</option><option>Odzież</option>
+          <option>Przychód</option><option>Inne</option>
+        </select>
+      </div>
+      <button class="btn full" onclick="addManual()">+ Dodaj transakcję</button>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const COLORS = {
+  'Spożywcze':'#3B6D11','Restauracje':'#993556','Transport':'#085041',
+  'Paliwo':'#854F0B','Rachunki':'#185FA5','Zdrowie':'#A32D2D',
+  'Rozrywka':'#BA7517','Zakupy online':'#534AB7','Odzież':'#993556',
+  'Przychód':'#3B6D11','Inne':'#888780'
+};
+
+let receipts = JSON.parse(localStorage.getItem('budzet_receipts') || '[]');
+let apiKey = localStorage.getItem('budzet_api_key') || '';
+let pendingTxs = null;
+
+function init() {
+  if (apiKey) {
+    document.getElementById('api-key-input').value = apiKey;
+    setKeyStatus(true);
+  }
+  const today = new Date();
+  document.getElementById('month-filter').value = today.toISOString().slice(0,7);
+}
+
+function saveKey() {
+  const v = document.getElementById('api-key-input').value.trim();
+  if (!v.startsWith('sk-ant')) { showToast('Nieprawidłowy klucz — powinien zaczynać się od sk-ant'); return; }
+  apiKey = v;
+  localStorage.setItem('budzet_api_key', v);
+  setKeyStatus(true);
+  showToast('Klucz zapisany ✓');
+}
+
+function setKeyStatus(ok) {
+  document.getElementById('key-dot').className = 'dot ' + (ok ? 'ok' : 'err');
+  document.getElementById('key-label').textContent = ok ? 'Klucz zapisany — gotowy do użycia' : 'Brak klucza';
+  document.getElementById('key-label').style.color = ok ? 'var(--green)' : 'var(--text2)';
+}
+
+function toggleKeyVisible() {
+  const inp = document.getElementById('api-key-input');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function sw(t) {
+  ['scan','sum','hist','settings'].forEach((n,i) => {
+    document.querySelectorAll('.tab')[i].classList.toggle('on', n===t);
+    document.getElementById('p-'+n).classList.toggle('on', n===t);
+  });
+  if (t==='sum') renderSum();
+  if (t==='hist') renderHist();
+}
+
+function onDrag(e, on) { e.preventDefault(); document.getElementById('dropzone').classList.toggle('drag', !!on); }
+function onDrop(e) { e.preventDefault(); onDrag(e, 0); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); }
+
+async function handleFile(file) {
+  if (!file) return;
+  if (!apiKey) { showErr('Najpierw wpisz klucz API Anthropic w sekcji na górze.'); return; }
+
+  document.getElementById('err-box').innerHTML = '';
+  document.getElementById('res-zone').innerHTML = '';
+  const prev = document.getElementById('img-preview');
+  prev.src = URL.createObjectURL(file);
+  prev.style.display = 'block';
+  document.getElementById('spinner-box').style.display = 'block';
+
+  const msgs = ['Odczytuję transakcje...','Rozpoznaję nazwy...','Przypisuję kategorie...','Obliczam sumy...'];
+  let mi = 0;
+  const iv = setInterval(() => { document.getElementById('spin-msg').textContent = msgs[Math.min(++mi, 3)]; }, 1500);
+
+  try {
+    const b64 = await toB64(file);
+    const mt = file.type || 'image/jpeg';
+
+    const prompt = `Jesteś ekspertem od analizy wyciągów bankowych. Przeanalizuj ten screenshot i zwróć WYŁĄCZNIE dane JSON, bez żadnego tekstu, komentarzy ani backticków markdown.
+
+Format odpowiedzi (tylko ten JSON, nic więcej):
+{"transactions":[{"date":"DD.MM.YYYY","name":"nazwa sklepu lub odbiorcy","amount":-45.90,"category":"Spożywcze","type":"out"}]}
+
+Zasady:
+- date: format DD.MM.YYYY, jeśli brak daty użyj dzisiejszej
+- name: krótka nazwa sklepu/odbiorcy (max 40 znaków)
+- amount: liczba, ujemna dla wydatków, dodatnia dla przychodów/wpływów
+- type: "out" dla wydatków, "in" dla przychodów
+- category: DOKŁADNIE jedna z: Spożywcze, Restauracje, Transport, Paliwo, Rachunki, Zdrowie, Rozrywka, Zakupy online, Odzież, Przychód, Inne
+
+Wskazówki do kategorii:
+- Biedronka/Lidl/Żabka/Carrefour/Auchan/sklepy spożywcze → Spożywcze
+- McDonald's/KFC/Pizza/kawiarnie/restauracje → Restauracje  
+- Orlen/BP/Shell/Lotos → Paliwo
+- MPK/PKP/Uber/bolt/taxi → Transport
+- Netflix/Spotify/kino/gry → Rozrywka
+- Allegro/Amazon/Zalando/sklepy online → Zakupy online
+- Apteka/lekarz/szpital → Zdrowie
+- Prąd/gaz/woda/czynsz/internet/telefon → Rachunki
+- Wpływ/wynagrodzenie/przelew przychodzący → Przychód`;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mt, data: b64 } },
+          { type: 'text', text: prompt }
+        ]}]
+      })
+    });
+
+    clearInterval(iv);
+    document.getElementById('spinner-box').style.display = 'none';
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      if (resp.status === 401) throw new Error('Nieprawidłowy klucz API. Sprawdź klucz w sekcji na górze.');
+      if (resp.status === 429) throw new Error('Przekroczono limit zapytań. Poczekaj chwilę i spróbuj ponownie.');
+      throw new Error(err.error?.message || `Błąd HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const raw = data.content.map(c => c.text||'').join('').replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(raw);
+    if (!parsed.transactions?.length) throw new Error('Nie znaleziono transakcji na tym screenshocie.');
+
+    pendingTxs = parsed.transactions;
+    renderResult(pendingTxs);
+
+  } catch(e) {
+    clearInterval(iv);
+    document.getElementById('spinner-box').style.display = 'none';
+    showErr(e.message);
+  }
+}
+
+function renderResult(txs) {
+  const out = txs.filter(t => t.type === 'out');
+  const inc = txs.filter(t => t.type === 'in');
+  const totalOut = out.reduce((s,t) => s + Math.abs(t.amount), 0);
+  const totalIn = inc.reduce((s,t) => s + Math.abs(t.amount), 0);
+
+  document.getElementById('res-zone').innerHTML = `
+    <div class="res-header">
+      <h3>Znaleziono ${txs.length} transakcji</h3>
+      <div class="res-totals">
+        <span class="tot-out">−${totalOut.toFixed(2)} zł</span>
+        ${totalIn > 0 ? `<span class="tot-in">+${totalIn.toFixed(2)} zł</span>` : ''}
+      </div>
+    </div>
+    <div class="tx-list">
+      ${txs.map(t => {
+        const catClass = 'cat-' + (t.category||'Inne').replace(/\s+/g,'-');
+        return `<div class="tx-row">
+          <span class="tx-date">${t.date||'—'}</span>
+          <span class="tx-name">${t.name}</span>
+          <span class="tx-cat ${catClass}">${t.category}</span>
+          <span class="tx-amt ${t.type==='in'?'in':'out'}">${t.type==='in'?'+':'−'}${Math.abs(t.amount).toFixed(2)} zł</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="btn primary full" onclick="saveTxs()">💾 Zapisz transakcje</button>`;
+}
+
+function saveTxs() {
+  if (!pendingTxs) return;
+  const out = pendingTxs.filter(t => t.type === 'out');
+  const total = out.reduce((s,t) => s + Math.abs(t.amount), 0);
+  receipts.push({
+    id: Date.now(),
+    savedAt: new Date().toLocaleDateString('pl-PL'),
+    savedMonth: new Date().toISOString().slice(0,7),
+    items: pendingTxs.map(t => ({ name: t.name, price: Math.abs(t.amount), category: t.category, type: t.type, date: t.date })),
+    total,
+    txCount: pendingTxs.length
+  });
+  localStorage.setItem('budzet_receipts', JSON.stringify(receipts));
+  pendingTxs = null;
+  document.getElementById('res-zone').innerHTML = '';
+  document.getElementById('img-preview').style.display = 'none';
+  showToast('Transakcje zapisane ✓');
+}
+
+function addManual() {
+  const name = document.getElementById('m-name').value.trim();
+  const price = parseFloat(document.getElementById('m-price').value);
+  const date = document.getElementById('m-date').value;
+  const cat = document.getElementById('m-cat').value;
+  if (!name || isNaN(price)) { showToast('Uzupełnij nazwę i kwotę'); return; }
+  const type = price >= 0 ? 'in' : 'out';
+  const dateStr = date ? new Date(date).toLocaleDateString('pl-PL') : new Date().toLocaleDateString('pl-PL');
+  receipts.push({
+    id: Date.now(), savedAt: dateStr,
+    savedMonth: (date||new Date().toISOString()).slice(0,7),
+    items: [{ name, price: Math.abs(price), category: cat, type, date: dateStr }],
+    total: Math.abs(price), txCount: 1
+  });
+  localStorage.setItem('budzet_receipts', JSON.stringify(receipts));
+  document.getElementById('m-name').value = '';
+  document.getElementById('m-price').value = '';
+  showToast('Dodano ✓');
+}
+
+function renderSum() {
+  const el = document.getElementById('sum-content');
+  const mf = document.getElementById('month-filter').value;
+  const filtered = mf
+    ? receipts.filter(r => (r.savedMonth||r.savedAt?.slice(6,10)+'-'+r.savedAt?.slice(3,5)) === mf)
+    : receipts;
+
+  if (!filtered.length) {
+    el.innerHTML = `<div class="empty"><div class="ico">📊</div><p>Brak danych${mf?' dla tego miesiąca':''}. Dodaj pierwsze transakcje.</p></div>`;
+    return;
+  }
+
+  const cats = {};
+  let totalOut = 0, totalIn = 0, txCount = 0;
+  filtered.forEach(r => r.items.forEach(it => {
+    if (it.type === 'in') { totalIn += it.price; }
+    else { totalOut += it.price; cats[it.category] = (cats[it.category]||0) + it.price; }
+    txCount++;
+  }));
+
+  const sorted = Object.entries(cats).sort((a,b) => b[1]-a[1]);
+  const mx = sorted[0]?.[1] || 1;
+
+  el.innerHTML = `
+    <div class="met-grid">
+      <div class="met"><div class="lbl">Wydano</div><div class="val" style="color:var(--red);">${totalOut.toFixed(0)} zł</div><div class="sub">${txCount} transakcji</div></div>
+      ${totalIn>0?`<div class="met"><div class="lbl">Wpłynęło</div><div class="val" style="color:var(--green);">${totalIn.toFixed(0)} zł</div><div class="sub">przychody</div></div>`:''}
+      <div class="met"><div class="lbl">Bilans</div><div class="val" style="color:${totalIn-totalOut>=0?'var(--green)':'var(--red)'};">${totalIn>0?(totalIn-totalOut>=0?'+':'')+(totalIn-totalOut).toFixed(0)+' zł':sorted[0]?.[0]||'—'}</div><div class="sub">${totalIn>0?'przychody − wydatki':'top kategoria'}</div></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Wydatki według kategorii</div>
+      ${sorted.map(([cat, amt]) => `
+        <div class="bar-row">
+          <span class="bar-label">${cat}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${(amt/mx*100).toFixed(0)}%;background:${COLORS[cat]||'#888'};"></div></div>
+          <span class="bar-amt">${amt.toFixed(2)} zł</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderHist() {
+  const el = document.getElementById('hist-content');
+  if (!receipts.length) {
+    el.innerHTML = `<div class="empty"><div class="ico">🗂</div><p>Brak zapisanych transakcji.</p></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="hist-list">${receipts.slice().reverse().map(r => `
+    <div class="hist-item">
+      <div class="hist-ico">🏦</div>
+      <div>
+        <div class="hist-name">${r.savedAt}</div>
+        <div class="hist-sub">${r.txCount||r.items.length} transakcji · ${[...new Set(r.items.map(i=>i.category))].join(', ')}</div>
+      </div>
+      <div class="hist-amt" style="color:var(--red);">${r.total.toFixed(2)} zł</div>
+    </div>`).join('')}</div>`;
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(receipts, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'budzet_domowy_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+}
+
+function clearAll() {
+  if (!confirm('Usunąć wszystkie dane? Tej operacji nie można cofnąć.')) return;
+  receipts = [];
+  localStorage.removeItem('budzet_receipts');
+  showToast('Dane usunięte');
+  renderHist();
+}
+
+function showErr(msg) {
+  document.getElementById('err-box').innerHTML = `<div class="err-box">⚠️ ${msg}</div>`;
+}
+
+function toB64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  setTimeout(() => t.classList.remove('on'), 2500);
+}
+
+init();
+</script>
+</body>
+</html>
