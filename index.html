@@ -427,9 +427,12 @@ body {
 
     <!-- TRANSACTIONS -->
     <div class="page" id="page-transactions">
-      <div class="page-header">
-        <h2>Transakcje</h2>
-        <p id="tx-page-sub">Lista wszystkich transakcji</p>
+      <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
+        <div>
+          <h2>Transakcje</h2>
+          <p id="tx-page-sub">Lista wszystkich transakcji</p>
+        </div>
+        <button class="btn-secondary" style="font-size:12px;padding:6px 14px;color:var(--red);border-color:var(--red);flex-shrink:0;margin-top:4px" onclick="clearCurrentMonth()">🗑 Wyczyść miesiąc</button>
       </div>
       <div class="tx-filters">
         <input type="text" id="tx-search" placeholder="🔍  Szukaj nazwy lub kategorii..." oninput="renderTransactions()">
@@ -908,6 +911,19 @@ function renderStats() {
   });
 }
 
+// ─── CLEAR MONTH ─────────────────────────────────────────────────────────────
+function clearCurrentMonth() {
+  const count = data.filter(t => t.month === curMonth).length;
+  if (count === 0) { alert('Brak transakcji w miesiącu: ' + curMonth); return; }
+  if (!confirm('Usunąć WSZYSTKIE ' + count + ' transakcji z miesiąca "' + curMonth + '"?\nTej operacji nie można cofnąć.')) return;
+  data = data.filter(t => t.month !== curMonth);
+  save();
+  const months = getMonths();
+  curMonth = months.length ? months[months.length - 1] : 'Maj 2026';
+  renderSidebarMonths();
+  renderCurrentPage();
+}
+
 // ─── IMPORT ───────────────────────────────────────────────────────────────
 const CAT_KEYWORDS = {
   'Spożywcze':         ['biedronka','lidl','kaufland','aldi','carrefour','zabka','żabka','stokrotka','tesco','netto','spar','polo market','frisco'],
@@ -966,22 +982,13 @@ function detectMonthFromText(text) {
 }
 
 function parseSantanderWyciag(text, month, defcat) {
-  // Santander wyciąg PDF format:
-  // Each transaction is a block:
-  //   DD.MM.YYYY DD.MM.YYYY  TYP OPISU  Opis...  numer_konta
-  //   wpływy   wydatki   saldo
-  // The amounts appear as: "1 000,00 0,00 1 000,67"  (wpływy wydatki saldo)
-  // OR split across lines
+  // NAPRAWIONY PARSER: wyciąg PDF Santander
+  // Każda transakcja: blok między parami dat DD.MM.YYYY DD.MM.YYYY
+  // Kwoty na końcu bloku: "WPŁYWY WYDATKI SALDO" np. "1 000,00 0,00 1 000,67"
+  // BŁĄD poprzedniej wersji: regex \d[\d\s]*,\d{2} łapał numery kont (PL15291000...) jako kwoty
   const results = [];
-
-  // Normalize: join continuation lines, collapse whitespace
   const normalized = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
-
-  // Find all transaction date anchors: "D.MM.YYYY D.MM.YYYY" or "DD.MM.YYYY DD.MM.YYYY"
-  // In the wyciąg the date pattern starts each transaction
   const datePairRe = /(\d{1,2}\.\d{2}\.\d{4})\s+(\d{1,2}\.\d{2}\.\d{4})/g;
-
-  // Split text into transaction blocks between date pairs
   const positions = [];
   let mm;
   while ((mm = datePairRe.exec(normalized)) !== null) {
@@ -994,70 +1001,74 @@ function parseSantanderWyciag(text, month, defcat) {
     const block = normalized.slice(start, end).trim();
     const dateStr = positions[i].date;
 
-    // Skip saldo lines
     if (/saldo (pocz|ko[ńn]c)/i.test(block)) continue;
-    if (/^–/.test(block)) continue;
+    if (/^[–-]/.test(block)) continue;
 
-    // Find amounts in block: look for pattern  N,NN  N,NN  N,NN  (wpływy, wydatki, saldo)
-    // or negative saldo like -8,33
-    const amtRe = /(\d[\d\s]*,\d{2})/g;
-    const amts = [...block.matchAll(amtRe)].map(m => parseAmt(m[1]));
+    const blockLines = block.split('\n').map(l => l.trim()).filter(Boolean);
 
-    if (amts.length < 2) continue;
+    // Szukaj linii TYLKO z kwotami: format "1 000,00 0,00 1 000,67" lub "0,00 9,00 -8,33"
+    // Linia kwot zawiera TYLKO liczby, spacje, przecinki i myślniki - BEZ liter
+    const amtLineRe = /^(-?\d[\d\s]*,\d{2})\s+(-?\d[\d\s]*,\d{2})(?:\s+(-?\d[\d\s]*,\d{2}))?$/;
+    let wplywy = null, wydatki = null;
 
-    // Last 3 numbers are: wpływy, wydatki, saldo  (or last 2 if one page break)
-    // We want wpływy and wydatki
-    let wplywy = 0, wydatki = 0;
-    if (amts.length >= 3) {
-      // Last three: wpływy wydatki saldo
-      wplywy  = amts[amts.length - 3];
-      wydatki = amts[amts.length - 2];
-    } else {
-      wplywy  = amts[0];
-      wydatki = amts[1];
+    for (const line of blockLines) {
+      const m2 = line.match(amtLineRe);
+      if (m2) {
+        wplywy = parseAmt(m2[1]);
+        wydatki = parseAmt(m2[2]);
+        // m2[3] = saldo, pomijamy
+        break;
+      }
     }
 
-    // Determine final amount
+    // Fallback: ostatnia linia zawierająca tylko cyfry/spacje/przecinki
+    if (wplywy === null) {
+      for (let j = blockLines.length - 1; j >= 0; j--) {
+        if (/^[-\d\s,]+$/.test(blockLines[j])) {
+          const nums = blockLines[j].match(/-?\d[\d\s]*,\d{2}/g);
+          if (nums && nums.length >= 2) {
+            wplywy = parseAmt(nums[0]);
+            wydatki = parseAmt(nums[1]);
+            break;
+          }
+        }
+      }
+    }
+
+    if (wplywy === null) continue;
+
     let amt;
     if (wplywy > 0 && wydatki === 0) amt = wplywy;
     else if (wydatki > 0 && wplywy === 0) amt = -wydatki;
-    else if (wplywy > 0 && wydatki > 0) {
-      // Both non-zero - pick larger as the real one (saldo contamination)
-      amt = wplywy >= wydatki ? wplywy : -wydatki;
-    } else continue;
+    else if (wplywy === 0 && wydatki === 0) continue;
+    else amt = wplywy >= wydatki ? wplywy : -wydatki;
 
     if (Math.abs(amt) < 0.01) continue;
 
-    // Extract name: first meaningful line of block (skip type keywords and account numbers)
-    const blockLines = block.split('\n').map(l => l.trim()).filter(Boolean);
-    let nameParts = [];
-    const skipRe = /^(UZNANIE|PRZELEW|OBCIĄŻENIE|OPŁATA|PROWIZJA|WYPŁATA|PRZELEW EXPRESS|PRZELEW NA RACHUNEK|PRZELEW WYCHODZĄCY|POLECENIE|ZWROT)/i;
-    const accountRe = /^[A-Z]{2}\d{2}[\d\s]{15,}$/;
-    const amtLineRe = /^\d[\d\s]*,\d{2}/;
-
-    // First line: operation type (UZNANIE etc) → use as category hint
+    // Wyciągnij nazwę - pomiń typ operacji, numery kont i linie z kwotami
+    const skipRe = /^(UZNANIE|PRZELEW|OBCIĄŻENIE|OPŁATA|PROWIZJA|WYPŁATA|POLECENIE|ZWROT)/i;
+    const accountRe = /^(PL|[A-Z]{2})\d{2}[\d\s]{10,}$|^\d{20,}$/;
+    const amtOnlyRe = /^[-\d\s,]+$/;
     let opType = '';
+    let nameParts = [];
+
     if (blockLines[0] && skipRe.test(blockLines[0])) opType = blockLines[0];
 
     for (const bl of blockLines) {
       if (skipRe.test(bl)) continue;
       if (accountRe.test(bl.replace(/\s/g,''))) continue;
-      if (amtLineRe.test(bl)) break; // hit amounts, stop
-      if (/^\d{5,}/.test(bl)) continue; // account number fragment
+      if (amtOnlyRe.test(bl)) continue;
       if (bl.length < 2) continue;
       nameParts.push(bl);
       if (nameParts.length >= 2) break;
     }
 
-    let name = nameParts.join(' ').trim();
-    if (!name) name = opType || 'Transakcja';
-    // Clean up: remove trailing account number fragments
+    let name = nameParts.join(' ').trim() || opType || 'Transakcja';
     name = name.replace(/\s+\d{6,}.*$/, '').trim();
     if (name.length > 60) name = name.slice(0, 60);
 
     const date = fmtDateShort(dateStr);
     const cat = guessCategory(name + ' ' + opType, amt > 0);
-
     results.push({ date, name, cat, amt, month });
   }
 
