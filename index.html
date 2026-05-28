@@ -495,8 +495,9 @@ body {
       <div class="card form-card" style="margin-bottom:20px">
         <div class="section-label">📋 Import z historii bankowej</div>
         <div class="import-format-tip">
-          <strong>Jak importować?</strong> Skopiuj tekst z ekranu historii transakcji (zaznacz wszystko, Ctrl+C) i wklej poniżej. Aplikacja spróbuje automatycznie rozpoznać daty, nazwy i kwoty. Każda linia = jedna transakcja.<br>
-          Przykładowy format: <code>04.05 SGT*spiriohub -176,09 PLN</code>
+          <strong>Obsługiwane formaty:</strong><br>
+          📄 <strong>Wyciąg Santander PDF</strong> — otwórz PDF w przeglądarce, zaznacz wszystko (Ctrl+A), skopiuj, wklej tutaj. Miesiąc zostanie wykryty automatycznie.<br>
+          📱 <strong>Historia z aplikacji</strong> — skopiuj tekst z ekranu historii (ING, PKO, Revolut itp.).
         </div>
         <div class="form-row single">
           <div class="form-group">
@@ -908,94 +909,249 @@ function renderStats() {
 }
 
 // ─── IMPORT ───────────────────────────────────────────────────────────────
-function doImport() {
-  const text = document.getElementById('import-text').value.trim();
-  const month = document.getElementById('import-month').value.trim();
-  const defcat = document.getElementById('import-defcat').value;
-  const statusEl = document.getElementById('import-status');
+const CAT_KEYWORDS = {
+  'Spożywcze':         ['biedronka','lidl','kaufland','aldi','carrefour','zabka','żabka','stokrotka','tesco','netto','spar','polo market','frisco'],
+  'Paliwo':            ['orlen','bp ','shell','lotos','circle k','paliwo','orlenpay','statoil'],
+  'Jedzenie poza domem':['mcdonalds','mcdonald','burger','kfc','pizza','kebab','subway','starbucks','coffeehell','restaura','pyszne','uber eat'],
+  'Subskrypcje':       ['netflix','spotify','apple.com','google one','canva','speechify','disney','youtube','hbo','tidal','prime video','openai'],
+  'Zakupy online':     ['allegro','amazon','temu','shein','aliexpress','empik','zalando','ole ole','mediaexpert','rtv euro'],
+  'Sport i hobby':     ['fitness','gym','siłownia','sport','decathlon','maslicka','fa ','aquapark','basen','squash'],
+  'Edukacja':          ['school','education','edukacja','headway','spiriohub','kurs','szkolenie','udemy','coursera'],
+  'Zdrowie':           ['apteka','pharmacy','lekarz','dentysta','stomatolog','clinic','przychodnia','nawme','medicover','lux med'],
+  'Dom i mieszkanie':  ['ikea','bricomarche','brico','leroy','castorama','jysk','obi ','zara home','agata','czynsz','czynszu','media','prąd','gaz '],
+  'Kosmetyki':         ['rossmann','douglas','sephora','hebe','drogeria','natura '],
+  'Telefon/TV/internet':['canal+','play','plus','orange','t-mobile','upc','netia','vectra','polsat','cyfrowy'],
+  'Opłaty bankowe':    ['opłata','prowizja','fee','opłata miesięczna','opłata za prowadzenie'],
+  'Transport/parking': ['parking','sppp','kbu','pkp','bus','uber','bolt','taxi','mzk','ztm','koleo','flixbus'],
+};
 
-  if (!text) { statusEl.textContent = 'Wklej tekst z historii banku.'; statusEl.className = 'form-status error'; return; }
-  if (!month) { statusEl.textContent = 'Wpisz nazwę miesiąca (np. Czerwiec 2026).'; statusEl.className = 'form-status error'; return; }
+function guessCategory(name, isIncome) {
+  if (isIncome) return 'Przychód';
+  const low = name.toLowerCase();
+  for (const [cat, kws] of Object.entries(CAT_KEYWORDS)) {
+    if (kws.some(k => low.includes(k))) return cat;
+  }
+  return document.getElementById('import-defcat').value;
+}
 
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  let added = 0;
+function parseAmt(s) {
+  // "1 000,00" or "1000,00" or "1.000,00" → number
+  return parseFloat(s.replace(/\s/g,'').replace(/\.(?=\d{3})/g,'').replace(',','.'));
+}
 
-  const catKeywords = {
-    'Spożywcze': ['biedronka','lidl','kaufland','aldi','carrefour','zabka','żabka','stokrotka','tesco','netto'],
-    'Paliwo': ['orlen','bp ','shell','lotos','circle k','paliwo','orlenpay'],
-    'Jedzenie poza domem': ['mcdonalds','mcdonald','burger','kfc','pizza','kebab','subway','starbucks','coffeehell','restaura'],
-    'Subskrypcje': ['netflix','spotify','apple.com','google one','canva','speechify','disney','youtube','hbo'],
-    'Zakupy online': ['allegro','amazon','temu','shein','aliexpress','empik','zalando'],
-    'Sport i hobby': ['fitness','gym','siłownia','sport','decathlon','maslicka','fa '],
-    'Edukacja': ['school','education','edukacja','headway','spiriohub','kurs','szkolenie','udemy'],
-    'Zdrowie': ['apteka','pharmacy','lekarz','dentysta','stomatolog','clinic','przychodnia'],
-    'Dom i mieszkanie': ['ikea','bricomarche','brico','leroy','castorama','home','dom'],
-    'Kosmetyki': ['rossmann','douglas','sephora','hebe','drogeria'],
-    'Telefon/TV/internet': ['canal+','play','plus','orange','t-mobile','upc','netia','vectra'],
-    'Opłaty bankowe': ['opłata','prowizja','fee','bank'],
-    'Transport/parking': ['parking','sppp','kbu','pkp','bus','uber','bolt','taxi'],
-    'Przychód': ['wyplata','wynagrodzenie','przelew przychodzacy','wpływ'],
-  };
+function fmtDateShort(dateStr) {
+  // "6.05.2026" or "06.05.2026" → "06.05"
+  const m = dateStr.match(/(\d{1,2})\.(\d{2})\.(\d{4})/);
+  if (!m) return dateStr;
+  return m[1].padStart(2,'0') + '.' + m[2];
+}
 
-  function guessCategory(name) {
-    const low = name.toLowerCase();
-    for (const [cat, kws] of Object.entries(catKeywords)) {
-      if (kws.some(k => low.includes(k))) return cat;
-    }
-    return defcat;
+function detectMonthFromText(text) {
+  // Try to find period line like "za okres od: 24.04.2026 r. do: 23.05.2026 r."
+  const periodRe = /za okres od:?\s*[\d.]+\s*r?\.\s*do:?\s*(\d{1,2})\.(\d{2})\.(\d{4})/i;
+  const m = text.match(periodRe);
+  if (m) {
+    const monthIdx = parseInt(m[2]) - 1;
+    const year = m[3];
+    return MONTH_ORDER[monthIdx] + ' ' + year;
+  }
+  // Try "data wyciągu DD.MM.YYYY"
+  const dateRe = /data wyci[aą]gu\s+(\d{1,2})\.(\d{2})\.(\d{4})/i;
+  const dm = text.match(dateRe);
+  if (dm) {
+    const monthIdx = parseInt(dm[2]) - 1;
+    return MONTH_ORDER[monthIdx] + ' ' + dm[3];
+  }
+  return null;
+}
+
+function parseSantanderWyciag(text, month, defcat) {
+  // Santander wyciąg PDF format:
+  // Each transaction is a block:
+  //   DD.MM.YYYY DD.MM.YYYY  TYP OPISU  Opis...  numer_konta
+  //   wpływy   wydatki   saldo
+  // The amounts appear as: "1 000,00 0,00 1 000,67"  (wpływy wydatki saldo)
+  // OR split across lines
+  const results = [];
+
+  // Normalize: join continuation lines, collapse whitespace
+  const normalized = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+
+  // Find all transaction date anchors: "D.MM.YYYY D.MM.YYYY" or "DD.MM.YYYY DD.MM.YYYY"
+  // In the wyciąg the date pattern starts each transaction
+  const datePairRe = /(\d{1,2}\.\d{2}\.\d{4})\s+(\d{1,2}\.\d{2}\.\d{4})/g;
+
+  // Split text into transaction blocks between date pairs
+  const positions = [];
+  let mm;
+  while ((mm = datePairRe.exec(normalized)) !== null) {
+    positions.push({ idx: mm.index, date: mm[1], end: mm.index + mm[0].length });
   }
 
-  lines.forEach(line => {
-    // Skip header lines
-    if (/^(data|tytuł|kwota|historia)/i.test(line)) return;
-    if (/^[\d]+\s*maja|^[\d]+\s*czerwca|^[\d]+\s*lipc|wtorek|środa|czwartek|piątek|sobota|niedziela|poniedziałek/i.test(line)) return;
+  for (let i = 0; i < positions.length; i++) {
+    const start = positions[i].end;
+    const end = i + 1 < positions.length ? positions[i+1].idx : normalized.length;
+    const block = normalized.slice(start, end).trim();
+    const dateStr = positions[i].date;
 
-    // Find amount - handle: -176,09 PLN / +1 000,00 PLN / -1,234.56
-    const amtRe = /([+-]?\s*\d[\d\s]*[,.]\d{2})\s*(PLN|zł)?/gi;
+    // Skip saldo lines
+    if (/saldo (pocz|ko[ńn]c)/i.test(block)) continue;
+    if (/^–/.test(block)) continue;
+
+    // Find amounts in block: look for pattern  N,NN  N,NN  N,NN  (wpływy, wydatki, saldo)
+    // or negative saldo like -8,33
+    const amtRe = /(\d[\d\s]*,\d{2})/g;
+    const amts = [...block.matchAll(amtRe)].map(m => parseAmt(m[1]));
+
+    if (amts.length < 2) continue;
+
+    // Last 3 numbers are: wpływy, wydatki, saldo  (or last 2 if one page break)
+    // We want wpływy and wydatki
+    let wplywy = 0, wydatki = 0;
+    if (amts.length >= 3) {
+      // Last three: wpływy wydatki saldo
+      wplywy  = amts[amts.length - 3];
+      wydatki = amts[amts.length - 2];
+    } else {
+      wplywy  = amts[0];
+      wydatki = amts[1];
+    }
+
+    // Determine final amount
+    let amt;
+    if (wplywy > 0 && wydatki === 0) amt = wplywy;
+    else if (wydatki > 0 && wplywy === 0) amt = -wydatki;
+    else if (wplywy > 0 && wydatki > 0) {
+      // Both non-zero - pick larger as the real one (saldo contamination)
+      amt = wplywy >= wydatki ? wplywy : -wydatki;
+    } else continue;
+
+    if (Math.abs(amt) < 0.01) continue;
+
+    // Extract name: first meaningful line of block (skip type keywords and account numbers)
+    const blockLines = block.split('\n').map(l => l.trim()).filter(Boolean);
+    let nameParts = [];
+    const skipRe = /^(UZNANIE|PRZELEW|OBCIĄŻENIE|OPŁATA|PROWIZJA|WYPŁATA|PRZELEW EXPRESS|PRZELEW NA RACHUNEK|PRZELEW WYCHODZĄCY|POLECENIE|ZWROT)/i;
+    const accountRe = /^[A-Z]{2}\d{2}[\d\s]{15,}$/;
+    const amtLineRe = /^\d[\d\s]*,\d{2}/;
+
+    // First line: operation type (UZNANIE etc) → use as category hint
+    let opType = '';
+    if (blockLines[0] && skipRe.test(blockLines[0])) opType = blockLines[0];
+
+    for (const bl of blockLines) {
+      if (skipRe.test(bl)) continue;
+      if (accountRe.test(bl.replace(/\s/g,''))) continue;
+      if (amtLineRe.test(bl)) break; // hit amounts, stop
+      if (/^\d{5,}/.test(bl)) continue; // account number fragment
+      if (bl.length < 2) continue;
+      nameParts.push(bl);
+      if (nameParts.length >= 2) break;
+    }
+
+    let name = nameParts.join(' ').trim();
+    if (!name) name = opType || 'Transakcja';
+    // Clean up: remove trailing account number fragments
+    name = name.replace(/\s+\d{6,}.*$/, '').trim();
+    if (name.length > 60) name = name.slice(0, 60);
+
+    const date = fmtDateShort(dateStr);
+    const cat = guessCategory(name + ' ' + opType, amt > 0);
+
+    results.push({ date, name, cat, amt, month });
+  }
+
+  return results;
+}
+
+function parseGeneric(text, month) {
+  // Fallback: line-by-line for app history copy-paste (ING app style)
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const results = [];
+  const skipRe = /^(data|tytuł|kwota|historia|saldo|wyciąg|strona|numer|rachunek|oprocentowanie|liczba|sposób|nazwa|wpływy|wydatki|dodatkowe|pieniądze|gwarancja|dokument|poświadczenie|electronic|erste|–\s*–)/i;
+  const dateRe = /\b(\d{2}[./]\d{2})\b/;
+  const amtRe = /([+-]?\s*\d[\d\s]*[,.]\d{2})\s*(PLN|zł)?/gi;
+
+  lines.forEach(line => {
+    if (skipRe.test(line)) return;
+    if (/wtorek|środa|czwartek|piątek|sobota|niedziela|poniedziałek/i.test(line)) return;
+
     const matches = [...line.matchAll(amtRe)];
     if (!matches.length) return;
 
     const lastMatch = matches[matches.length - 1];
-    let amtStr = lastMatch[1].replace(/\s/g, '').replace(',', '.');
+    let amtStr = lastMatch[1].replace(/\s/g,'').replace(',','.');
     let amt = parseFloat(amtStr);
-    if (isNaN(amt)) return;
+    if (isNaN(amt) || Math.abs(amt) < 0.01) return;
 
-    // Determine sign from context
     const lineBeforeAmt = line.slice(0, lastMatch.index);
     if (lineBeforeAmt.includes('-') && amt > 0) amt = -amt;
 
-    // Skip zero
-    if (amt === 0) return;
-
-    // Extract date
-    const dateRe = /\b(\d{2}[./]\d{2})\b/;
     const dateMatch = line.match(dateRe);
-    const date = dateMatch ? dateMatch[1].replace('/', '.') : '01.' + (MONTH_ORDER.indexOf(month.split(' ')[0])+1).toString().padStart(2,'0');
+    const date = dateMatch ? dateMatch[1].replace('/','.')
+      : '01.' + String(MONTH_ORDER.indexOf(month.split(' ')[0])+1).padStart(2,'0');
 
-    // Extract name - take content between date and amount
-    let name = lineBeforeAmt.replace(dateRe, '').replace(/^[-+\s]+/, '').trim();
-    name = name.replace(/\s{2,}/g, ' ').replace(/[|]/g, '').trim();
-    if (name.length < 2) name = 'Transakcja ' + (added+1);
-    if (name.length > 50) name = name.slice(0, 50);
+    let name = lineBeforeAmt.replace(dateRe,'').replace(/^[-+\s]+/,'').trim();
+    name = name.replace(/\s{2,}/g,' ').replace(/[|]/g,'').trim();
+    if (name.length < 2) name = 'Transakcja';
+    if (name.length > 60) name = name.slice(0, 60);
 
-    const cat = amt > 0 ? 'Przychód' : guessCategory(name);
-
-    data.push({ date, name, cat, amt, month });
-    added++;
+    results.push({ date, name, cat: guessCategory(name, amt > 0), amt, month });
   });
+  return results;
+}
 
-  if (added === 0) {
-    statusEl.textContent = 'Nie rozpoznano żadnych transakcji. Sprawdź format tekstu.';
+function doImport() {
+  const text = document.getElementById('import-text').value.trim();
+  const statusEl = document.getElementById('import-status');
+
+  if (!text) { statusEl.textContent = 'Wklej tekst z wyciągu lub historii banku.'; statusEl.className = 'form-status error'; return; }
+
+  // Auto-detect month from wyciąg text, fallback to input field
+  const autoMonth = detectMonthFromText(text);
+  const inputMonth = document.getElementById('import-month').value.trim();
+  const month = inputMonth || autoMonth;
+  if (!month) { statusEl.textContent = 'Wpisz nazwę miesiąca (np. Maj 2026).'; statusEl.className = 'form-status error'; return; }
+
+  // Auto-update the month field if we detected it
+  if (autoMonth && !inputMonth) {
+    document.getElementById('import-month').value = autoMonth;
+  }
+
+  // Detect format: Santander wyciąg has date pairs "DD.MM.YYYY DD.MM.YYYY"
+  const isSantander = /\d{1,2}\.\d{2}\.\d{4}\s+\d{1,2}\.\d{2}\.\d{4}/.test(text);
+
+  let results;
+  if (isSantander) {
+    results = parseSantanderWyciag(text, month, document.getElementById('import-defcat').value);
+  } else {
+    results = parseGeneric(text, month);
+  }
+
+  // Deduplicate against existing data (same date+name+amt+month)
+  const existing = new Set(data.map(t => `${t.month}|${t.date}|${t.name}|${t.amt}`));
+  const fresh = results.filter(t => !existing.has(`${t.month}|${t.date}|${t.name}|${t.amt}`));
+
+  if (fresh.length === 0 && results.length > 0) {
+    statusEl.textContent = `Wszystkie ${results.length} transakcji już istnieje w tym miesiącu.`;
     statusEl.className = 'form-status error';
     return;
   }
 
+  if (fresh.length === 0) {
+    statusEl.textContent = 'Nie rozpoznano żadnych transakcji. Sprawdź format.';
+    statusEl.className = 'form-status error';
+    return;
+  }
+
+  data.push(...fresh);
   save();
   curMonth = month;
   renderSidebarMonths();
-  statusEl.textContent = `✓ Zaimportowano ${added} transakcji do "${month}"`;
+  const fmt2 = isSantander ? 'wyciąg Santander' : 'historia banku';
+  statusEl.textContent = `✓ Zaimportowano ${fresh.length} transakcji (${fmt2}) do "${month}"`;
   statusEl.className = 'form-status';
-  setTimeout(() => { statusEl.textContent = ''; }, 5000);
+  setTimeout(() => { statusEl.textContent = ''; }, 6000);
 }
 
 // ─── MANUAL ADD ───────────────────────────────────────────────────────────
