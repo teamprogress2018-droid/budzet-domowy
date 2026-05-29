@@ -447,7 +447,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
     <div class="frow f1">
       <div class="fg"><label>Miesiąc (auto-wykrywany lub wpisz ręcznie)</label>
-        <input type="text" id="imp-month" placeholder="np. Czerwiec 2026">
+        <input type="text" id="imp-month" placeholder="Auto-wykrywany z wyciągu lub wpisz: Maj 2026">
       </div>
     </div>
     <div class="frow f1">
@@ -783,11 +783,25 @@ function isCash(t){ return t.src === 'cash'; }
 function renderSidebar(){
   const months = getMonths();
   document.getElementById('month-list').innerHTML = months.map(m=>`
-    <div class="month-pill ${m===curMonth?'active':''}" onclick="selMonth('${m}')">${m}<span style="opacity:.4;font-size:10px">${data.filter(t=>t.month===m).length}</span></div>`).join('');
+    <div class="month-pill ${m===curMonth?'active':''}" style="position:relative">
+      <span style="flex:1;cursor:pointer" onclick="selMonth('${m}')">${m} <span style="opacity:.4;font-size:10px">${data.filter(t=>t.month===m).length}</span></span>
+      <button onclick="deleteMonth('${m}')" title="Usuń miesiąc" style="background:none;border:none;color:${m===curMonth?'rgba(255,255,255,.6)':'var(--text3)'};cursor:pointer;font-size:14px;line-height:1;padding:0 2px;margin-left:4px;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='${m===curMonth?'rgba(255,255,255,.6)':'var(--text3)'}'">&times;</button>
+    </div>`).join('');
   document.getElementById('sb-sub').textContent = months.length + ' miesięcy';
 }
 
 function selMonth(m){ curMonth=m; renderSidebar(); renderPage(); }
+
+function deleteMonth(m){
+  const n = data.filter(t=>t.month===m).length;
+  if(!confirm('Usunąć WSZYSTKIE '+n+' transakcji z miesiąca "'+m+'"?\nTej operacji nie można cofnąć.')) return;
+  data = data.filter(t=>t.month!==m);
+  save();
+  const months=getMonths();
+  if(curMonth===m) curMonth = months.length ? months[months.length-1] : 'Maj 2026';
+  renderSidebar();
+  renderPage();
+}
 
 // ═══════════════════════════════════════════════════
 // ROUTING
@@ -1199,6 +1213,9 @@ function detectMonth(text){
   return null;
 }
 
+// Transfery wewnętrzne — pomijamy przy imporcie
+const INTERNAL_TRANSFER_RE = /spłata karty kredytowej|splata karty|przelew własny|przelew wewnętrzny|własne konto|between accounts/i;
+
 function parseSantander(text, month){
   const results=[];
   const norm=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
@@ -1213,6 +1230,8 @@ function parseSantander(text, month){
     const dateStr=pos[i].date;
     if(/saldo (pocz|ko[ńn]c)/i.test(block)) continue;
     if(/^[–-]/.test(block)) continue;
+    // Pomiń transfery wewnętrzne (spłata karty kredytowej)
+    if(INTERNAL_TRANSFER_RE.test(block)) continue;
 
     const blines=block.split('\n').map(l=>l.trim()).filter(Boolean);
     const alRe=/^(-?\d[\d\s]*,\d{2})\s+(-?\d[\d\s]*,\d{2})(?:\s+(-?\d[\d\s]*,\d{2}))?$/;
@@ -1281,26 +1300,34 @@ function doImport(){
   const text=document.getElementById('imp-text').value.trim();
   const statusEl=document.getElementById('imp-status');
   if(!text){ statusEl.textContent='Wklej tekst.'; statusEl.className='fstatus err'; return; }
-  const autoM=detectMonth(text);
+
+  // Miesiąc: pole ręczne ma ZAWSZE priorytet nad auto-detekcją
   const inputM=document.getElementById('imp-month').value.trim();
+  const autoM=detectMonth(text);
   const month=inputM||autoM;
-  if(!month){ statusEl.textContent='Wpisz miesiąc.'; statusEl.className='fstatus err'; return; }
-  if(autoM&&!inputM) document.getElementById('imp-month').value=autoM;
+  if(!month){ statusEl.textContent='Wpisz miesiąc (np. Maj 2026).'; statusEl.className='fstatus err'; return; }
+  if(!inputM&&autoM) document.getElementById('imp-month').value=autoM;
 
   const isSant=/\d{1,2}\.\d{2}\.\d{4}\s+\d{1,2}\.\d{2}\.\d{4}/.test(text);
   const results=isSant?parseSantander(text,month):parseGeneric(text,month);
 
+  // Policz pominięte transfery wewnętrzne
+  const skipCount = isSant ? (text.match(/sp.ata karty kredytowej/gi)||[]).length : 0;
+
   const existing=new Set(data.map(t=>`${t.month}|${t.date}|${t.name}|${t.amt}`));
   const fresh=results.filter(t=>!existing.has(`${t.month}|${t.date}|${t.name}|${t.amt}`));
 
-  if(!fresh.length&&results.length){ statusEl.textContent='Transakcje już istnieją.'; statusEl.className='fstatus err'; return; }
-  if(!fresh.length){ statusEl.textContent='Nie rozpoznano transakcji.'; statusEl.className='fstatus err'; return; }
+  if(!fresh.length&&results.length){ statusEl.textContent='Transakcje już istnieją w tym miesiącu.'; statusEl.className='fstatus err'; return; }
+  if(!fresh.length){ statusEl.textContent='Nie rozpoznano transakcji. Sprawdź format i miesiąc.'; statusEl.className='fstatus err'; return; }
 
   data.push(...fresh);
   save(); curMonth=month; renderSidebar();
-  statusEl.textContent=`✓ Zaimportowano ${fresh.length} transakcji (${isSant?'Santander':'aplikacja'}) do "${month}"`;
+  const skipInfo = skipCount>0 ? ` · pominięto ${skipCount} transferów wewnętrznych` : '';
+  statusEl.textContent='✓ Zaimportowano '+fresh.length+' transakcji do "'+month+'"'+skipInfo;
   statusEl.className='fstatus';
-  setTimeout(()=>{ statusEl.textContent=''; },6000);
+  document.getElementById('imp-text').value='';
+  setTimeout(()=>{ statusEl.textContent=''; },8000);
+  renderPage();
 }
 
 
@@ -1653,7 +1680,7 @@ function toggleTheme(){
   const saved=localStorage.getItem('budzet_theme');
   if(saved==='dark'){ document.documentElement.setAttribute('data-theme','dark'); document.getElementById('theme-lbl').textContent='Ciemny motyw'; }
   document.getElementById('q-month').value=curMonth;
-  document.getElementById('imp-month').value='Czerwiec 2026';
+  document.getElementById('imp-month').value='';
   quickTypeChange();
   renderSidebar();
   renderDash();
