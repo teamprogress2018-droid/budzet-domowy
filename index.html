@@ -189,7 +189,24 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </style>
 </head>
 <body>
-<div class="app">
+<div id="login-overlay" style="position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999">
+  <div class="card" style="width:340px;padding:28px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <div style="width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:#fff;stroke-width:2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
+      <h2 style="font-size:17px">Budżet Domowy</h2>
+    </div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:18px">Zaloguj się, żeby zobaczyć swoje dane</p>
+    <div class="fg" style="margin-bottom:10px"><label>E-mail</label><input id="login-email" type="email" autocomplete="username"></div>
+    <div class="fg" style="margin-bottom:4px"><label>Hasło</label><input id="login-password" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')fbDoLogin()"></div>
+    <div id="login-error" style="color:var(--red);font-size:11.5px;min-height:16px;margin:6px 0"></div>
+    <button class="btn-p" style="width:100%;margin-top:6px" onclick="fbDoLogin()" id="login-btn">Zaloguj się</button>
+    <div style="font-size:10.5px;color:var(--text3);margin-top:14px;text-align:center">🔒 Twoje dane są prywatne i widoczne tylko po zalogowaniu</div>
+  </div>
+</div>
+
+<div class="app" style="display:none" id="main-app">
 
 <!-- SIDEBAR -->
 <nav class="sidebar">
@@ -245,9 +262,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div id="month-list" style="padding:2px 0 6px"></div>
   </div>
   <div class="sb-footer">
+    <div id="fb-sync-status" style="font-size:10px;color:var(--text3);padding:0 8px"></div>
     <button class="theme-btn" onclick="toggleTheme()">
       <div class="tog-track"><div class="tog-thumb"></div></div>
       <span id="theme-lbl">Jasny motyw</span>
+    </button>
+    <button onclick="fbDoLogout()" style="display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:var(--rsm);cursor:pointer;font-size:13px;color:var(--red);border:none;background:none;width:100%;text-align:left">
+      <svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Wyloguj
     </button>
   </div>
 </nav>
@@ -1944,6 +1965,7 @@ function saveDebtForm(){
   let debts=getDebts();
   if(editId){ debts=debts.map(d=>d.id===debt.id?debt:d); } else { debts.push(debt); }
   saveDebtsData(debts);
+  if(typeof fbPushDebt==='function') fbPushDebt(debt);
   closeDebtForm();
   renderDebts();
 }
@@ -1951,6 +1973,7 @@ function saveDebtForm(){
 function deleteDebt(id){
   if(!confirm('Usunąć ten dług z listy? (to tylko usuwa wpis w aplikacji, nie wpływa na rzeczywiste zobowiązanie)')) return;
   saveDebtsData(getDebts().filter(d=>d.id!==id));
+  if(typeof fbDeleteDebt==='function') fbDeleteDebt(id);
   renderDebts();
 }
 
@@ -2104,6 +2127,7 @@ function saveImpulseForm(){
   const list=getImpulse();
   list.unshift(entry);
   saveImpulseData(list);
+  if(typeof fbPushImpulse==='function') fbPushImpulse(entry);
   closeImpulseForm();
   renderImpulse();
 }
@@ -2111,14 +2135,22 @@ function saveImpulseForm(){
 function decideImpulse(id, decision){
   const list=getImpulse().map(e=> e.id===id ? {...e, status:decision, decidedAt:Date.now()} : e);
   saveImpulseData(list);
+  const updated = list.find(e=>e.id===id);
+  if(updated && typeof fbPushImpulse==='function') fbPushImpulse(updated);
   renderImpulse();
 }
 function extendImpulse(id){
   const list=getImpulse().map(e=> e.id===id ? {...e, waitUntil: e.waitUntil + 24*3600*1000} : e);
   saveImpulseData(list);
+  const updated = list.find(e=>e.id===id);
+  if(updated && typeof fbPushImpulse==='function') fbPushImpulse(updated);
   renderImpulse();
 }
-function deleteImpulseEntry(id){ saveImpulseData(getImpulse().filter(e=>e.id!==id)); renderImpulse(); }
+function deleteImpulseEntry(id){
+  saveImpulseData(getImpulse().filter(e=>e.id!==id));
+  if(typeof fbDeleteImpulse==='function') fbDeleteImpulse(id);
+  renderImpulse();
+}
 
 function renderImpulse(){
   const list=getImpulse();
@@ -2350,5 +2382,9 @@ function toggleTheme(){
   renderDash();
 })();
 </script>
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
+<script src="fb-sync.js"></script>
 </body>
 </html>
