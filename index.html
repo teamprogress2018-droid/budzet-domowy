@@ -126,6 +126,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .fg input,.fg select,.fg textarea{width:100%;padding:8px 11px;border:1px solid var(--border2);border-radius:var(--rsm);background:var(--bg2);color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border .15s}
 .fg textarea{resize:vertical;min-height:90px;font-family:'DM Mono',monospace;font-size:11.5px;line-height:1.6}
 .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--accent);background:var(--card)}
+.fg-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .factions{display:flex;gap:8px;align-items:center;margin-top:14px}
 .btn-p{padding:8px 20px;border-radius:var(--rsm);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity .15s}
 .btn-p:hover{opacity:.85}
@@ -223,6 +224,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="nav-btn" onclick="goPage('plan')">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Plan roczny
     </button>
+    <button class="nav-btn" onclick="goPage('debts')">
+      <svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Zadłużenie
+    </button>
+    <button class="nav-btn" onclick="goPage('subs')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Subskrypcje
+    </button>
+    <button class="nav-btn" onclick="goPage('impulse')">
+      <svg viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>Kontrola zakupów
+    </button>
+    <button class="nav-btn" onclick="goPage('advisor')">
+      <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>Doradca AI
+    </button>
     <button class="nav-btn" onclick="goPage('add')">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Dodaj / Import
     </button>
@@ -257,6 +270,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="mc"><div class="ml">💼 Wynagrodzenie / firma</div><div class="mv g" id="d-s-biz">—</div><div class="ms" id="d-s-biz-s"></div></div>
     <div class="mc"><div class="ml">💪 Plany treningowe</div><div class="mv g" id="d-s-train">—</div><div class="ms" id="d-s-train-s"></div></div>
     <div class="mc"><div class="ml">🏠 Inne przychody</div><div class="mv g" id="d-s-other">—</div><div class="ms" id="d-s-other-s"></div></div>
+  </div>
+
+  <div class="card card-p" id="d-renewal-alert" style="display:none;margin-bottom:16px;background:var(--amber-bg);border-color:rgba(183,119,13,.25)"></div>
+
+  <div class="card" style="overflow:hidden;margin-bottom:18px">
+    <div class="card-p" style="padding-bottom:8px">
+      <div class="sh"><h3>📊 Wszystkie zobowiązania — jeden widok</h3>
+        <button class="btn-s" style="font-size:11px;padding:4px 11px" onclick="goPage('debts')">Szczegóły →</button>
+      </div>
+    </div>
+    <div class="mg mg-3" style="padding:0 18px 18px">
+      <div class="mc" style="background:var(--bg2)"><div class="ml">Długi łącznie</div><div class="mv r" id="d-obl-debt">—</div><div class="ms" id="d-obl-debt-count"></div></div>
+      <div class="mc" style="background:var(--bg2)"><div class="ml">Subskrypcje / mc</div><div class="mv b" id="d-obl-subs">—</div><div class="ms" id="d-obl-subs-count"></div></div>
+      <div class="mc" style="background:var(--bg2)"><div class="ml">Miesięczne obciążenie</div><div class="mv n" id="d-obl-total">—</div><div class="ms">min. raty + subskrypcje</div></div>
+    </div>
   </div>
 
   <div class="g2">
@@ -383,6 +411,174 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="card" style="overflow:hidden">
     <div class="card-p" style="padding-bottom:8px"><div class="sh"><h3>Przychody wg źródła — trend</h3></div></div>
     <div class="chart-wrap" style="height:220px;padding:0 18px 14px"><canvas id="chartIncTrend"></canvas></div>
+  </div>
+</div>
+
+<!-- DEBTS PAGE -->
+<div class="page" id="page-debts">
+  <div class="ph"><div class="ph-left"><h2>Zadłużenie</h2><p>Karty kredytowe, dług u żony i inne zobowiązania — pod kontrolą</p></div>
+    <button class="btn-p" style="flex-shrink:0" onclick="showAddDebt()">+ Dodaj dług</button>
+  </div>
+
+  <div class="mg mg-3" style="margin-bottom:18px">
+    <div class="mc"><div class="ml">Łączne zadłużenie</div><div class="mv r" id="d-total">—</div><div class="ms">suma wszystkich długów</div></div>
+    <div class="mc"><div class="ml">Miesięczne minimum</div><div class="mv b" id="d-min">—</div><div class="ms">suma minimalnych rat</div></div>
+    <div class="mc"><div class="ml">Spłacono dotychczas</div><div class="mv g" id="d-paid">—</div><div class="ms" id="d-paid-pct"></div></div>
+  </div>
+
+  <div class="card card-p" style="margin-bottom:16px;background:var(--blue-bg);border-color:rgba(26,95,168,.2)">
+    <div class="sh" style="margin-bottom:8px"><h3>🎯 Strategia spłaty</h3></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn-s" id="strat-snowball" onclick="setDebtStrategy('snowball')" style="flex:1">❄️ Śnieżna kula (najmniejszy dług pierwszy)</button>
+      <button class="btn-s" id="strat-avalanche" onclick="setDebtStrategy('avalanche')" style="flex:1">🏔️ Lawina (najwyższe oprocentowanie pierwsze)</button>
+    </div>
+    <div id="debt-strategy-order" style="font-size:12px;color:var(--text2);line-height:1.7"></div>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <div class="card-p" style="padding-bottom:4px"><div class="sh"><h3>Twoje długi</h3></div></div>
+    <div id="debts-list" style="padding:6px 18px 16px"></div>
+  </div>
+
+  <div class="card form-card" id="debt-form-modal" style="display:none;margin-bottom:16px;padding:18px">
+    <div class="sh" style="margin-bottom:12px"><h3 id="debt-form-title">Nowy dług</h3></div>
+    <input type="hidden" id="debt-edit-id">
+      <div class="fg"><label>Nazwa (np. "Karta Millennium", "Dług u żony")</label><input id="debt-name" placeholder="Nazwa zobowiązania"></div>
+      <div class="fg-row">
+        <div class="fg"><label>Typ</label>
+          <select id="debt-type"><option value="karta">💳 Karta kredytowa</option><option value="rodzina">👤 Dług u bliskiej osoby</option><option value="pozyczka">🏦 Pożyczka</option><option value="inne">📋 Inne</option></select>
+        </div>
+        <div class="fg"><label>Aktualne saldo (zł)</label><input id="debt-balance" type="number" placeholder="0"></div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>Oprocentowanie roczne % (opcjonalnie)</label><input id="debt-rate" type="number" placeholder="np. 19.9"></div>
+        <div class="fg"><label>Minimalna rata miesięczna (zł)</label><input id="debt-min-payment" type="number" placeholder="0"></div>
+      </div>
+      <div class="fg"><label>Saldo początkowe (do paska postępu, opcjonalnie)</label><input id="debt-original" type="number" placeholder="pozostaw puste = brak paska"></div>
+      <div class="fg"><label>Notatki</label><input id="debt-notes" placeholder="np. termin płatności, numer karty..."></div>
+      <div class="factions" style="margin-top:14px">
+        <button class="btn-p" onclick="saveDebtForm()">Zapisz</button>
+        <button class="btn-s" onclick="closeDebtForm()">Anuluj</button>
+      </div>
+  </div>
+</div>
+
+<!-- SUBSCRIPTIONS PAGE -->
+<div class="page" id="page-subs">
+  <div class="ph"><div class="ph-left"><h2>Subskrypcje</h2><p>Wszystkie cykliczne opłaty w jednym miejscu</p></div>
+    <button class="btn-p" style="flex-shrink:0" onclick="showAddSub()">+ Dodaj subskrypcję</button>
+  </div>
+
+  <div class="mg mg-3" style="margin-bottom:18px">
+    <div class="mc"><div class="ml">Koszt miesięczny</div><div class="mv r" id="s-monthly">—</div><div class="ms">suma aktywnych subskrypcji</div></div>
+    <div class="mc"><div class="ml">Koszt roczny</div><div class="mv b" id="s-yearly">—</div><div class="ms">projekcja na 12 miesięcy</div></div>
+    <div class="mc"><div class="ml">Aktywne subskrypcje</div><div class="mv n" id="s-count">—</div><div class="ms" id="s-flagged"></div></div>
+  </div>
+
+  <div class="card card-p" id="s-renewal-alert" style="display:none;margin-bottom:16px;background:var(--amber-bg);border-color:rgba(183,119,13,.25)"></div>
+
+  <div class="card" style="overflow:hidden">
+    <div class="card-p" style="padding-bottom:4px"><div class="sh"><h3>Lista subskrypcji</h3></div></div>
+    <div id="subs-list" style="padding:6px 18px 16px"></div>
+  </div>
+
+  <div class="card form-card" id="sub-form-modal" style="display:none;margin-bottom:16px;padding:18px">
+    <div class="sh" style="margin-bottom:12px"><h3>Nowa subskrypcja</h3></div>
+    <input type="hidden" id="sub-edit-id">
+    <div class="fg"><label>Nazwa (np. Netflix, Spotify, siłownia)</label><input id="sub-name" placeholder="Nazwa usługi"></div>
+    <div class="fg-row">
+      <div class="fg"><label>Kwota (zł)</label><input id="sub-amount" type="number" placeholder="0"></div>
+      <div class="fg"><label>Cykl</label><select id="sub-cycle"><option value="monthly">Miesięcznie</option><option value="yearly">Rocznie</option></select></div>
+    </div>
+    <div class="fg"><label>Najbliższa płatność</label><input id="sub-next-date" type="date"></div>
+    <div class="factions" style="margin-top:14px">
+      <button class="btn-p" onclick="saveSubForm()">Zapisz</button>
+      <button class="btn-s" onclick="closeSubForm()">Anuluj</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMPULSE CONTROL PAGE -->
+<div class="page" id="page-impulse">
+  <div class="ph"><div class="ph-left"><h2>Kontrola zakupów impulsywnych</h2><p>Zasada bufora czasowego: zanim kupisz, poczekaj — potem zdecyduj na chłodno</p></div>
+    <button class="btn-p" style="flex-shrink:0" onclick="showAddImpulse()">+ Chcę to kupić</button>
+  </div>
+
+  <div class="mg mg-3" style="margin-bottom:18px">
+    <div class="mc"><div class="ml">Zaoszczędzono</div><div class="mv g" id="i-saved">—</div><div class="ms">rzeczy, z których zrezygnowałeś</div></div>
+    <div class="mc"><div class="ml">W trakcie oczekiwania</div><div class="mv b" id="i-waiting">—</div><div class="ms" id="i-waiting-count"></div></div>
+    <div class="mc"><div class="ml">Kupione mimo to</div><div class="mv r" id="i-bought">—</div><div class="ms">po okresie oczekiwania</div></div>
+  </div>
+
+  <div class="card card-p" style="margin-bottom:16px;background:var(--purple-bg);border-color:rgba(109,40,217,.2)">
+    <div style="font-size:12px;color:var(--purple);line-height:1.7">
+      <strong>💡 Jak to działa</strong><br>
+      Gdy najdzie Cię ochota na zakup, wpisz go tutaj zamiast kupować od razu. Apka ustawia zegar (24-72h, Ty wybierasz). Gdy czas minie, wracasz i decydujesz na chłodno: kupić czy zrezygnować. Sama ta jedna przerwa bardzo często wystarcza, żeby ochota minęła.
+    </div>
+  </div>
+
+  <div class="card" id="impulse-retro-card" style="overflow:hidden;margin-bottom:16px;display:none">
+    <div class="card-p" style="padding-bottom:4px"><div class="sh"><h3>📅 Retrospektywa tygodnia</h3></div></div>
+    <div id="impulse-retro" style="padding:6px 18px 16px"></div>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <div class="card-p" style="padding-bottom:4px"><div class="sh"><h3>Twoja lista oczekiwania</h3></div></div>
+    <div id="impulse-list" style="padding:6px 18px 16px"></div>
+  </div>
+
+  <div class="card form-card" id="impulse-form-modal" style="display:none;margin-bottom:16px;padding:18px">
+    <div class="sh" style="margin-bottom:12px"><h3>Co chcesz kupić?</h3></div>
+    <div class="fg"><label>Co to jest?</label><input id="imp-item" placeholder="np. nowe słuchawki, buty..."></div>
+    <div class="fg-row">
+      <div class="fg"><label>Cena (zł)</label><input id="imp-price" type="number" placeholder="0"></div>
+      <div class="fg"><label>Ile poczekać?</label><select id="imp-wait"><option value="24">24 godziny</option><option value="48" selected>48 godzin</option><option value="72">72 godziny</option></select></div>
+    </div>
+    <div class="fg"><label>Dlaczego akurat teraz? (opcjonalnie, pomaga zauważyć wzorce)</label><input id="imp-trigger" placeholder="np. nuda, stres, reklama, scrollowanie..."></div>
+    <div class="fg"><label>Jak się teraz czujesz?</label>
+      <select id="imp-mood">
+        <option value="">— nie chcę mówić —</option>
+        <option value="spokojny">😌 Spokojny / zrównoważony</option>
+        <option value="znudzony">😴 Znudzony</option>
+        <option value="zestresowany">😩 Zestresowany</option>
+        <option value="smutny">😔 Smutny / dołek</option>
+        <option value="podekscytowany">😃 Podekscytowany / euforia</option>
+      </select>
+    </div>
+    <div style="background:var(--amber-bg);border:1px solid rgba(183,119,13,.25);border-radius:var(--rsm);padding:12px;margin:6px 0">
+      <div style="font-size:11px;font-weight:600;color:var(--amber);margin-bottom:8px">Zanim dodasz do listy — dwa szybkie pytania:</div>
+      <div class="fg" style="margin-bottom:8px"><label>Czy to jest zaplanowane w budżecie na ten miesiąc?</label>
+        <select id="imp-planned"><option value="">— wybierz —</option><option value="tak">Tak, było w planie</option><option value="nie">Nie, to nieplanowane</option><option value="niepewne">Nie jestem pewien</option></select>
+      </div>
+      <div class="fg" style="margin-bottom:0"><label>Ile podobnych rzeczy kupiłeś pod wpływem impulsu w tym tygodniu?</label>
+        <select id="imp-frequency"><option value="0">To pierwszy raz w tym tygodniu</option><option value="1">Raz już tak zrobiłem</option><option value="2">2 razy</option><option value="3+">3 lub więcej razy</option></select>
+      </div>
+    </div>
+    <div class="factions" style="margin-top:14px">
+      <button class="btn-p" onclick="saveImpulseForm()">Dodaj do listy oczekiwania</button>
+      <button class="btn-s" onclick="closeImpulseForm()">Anuluj</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI ADVISOR PAGE -->
+<div class="page" id="page-advisor">
+  <div class="ph"><div class="ph-left"><h2>Doradca AI</h2><p>Zna Twoje wydatki, długi i subskrypcje — zapytaj o cokolwiek</p></div>
+    <button class="btn-s" style="flex-shrink:0" onclick="clearAdvisorChat()">🗑 Wyczyść rozmowę</button>
+  </div>
+
+  <div class="card card-p" style="margin-bottom:14px;background:var(--blue-bg);border-color:rgba(26,95,168,.2)">
+    <div style="font-size:12px;color:var(--blue);line-height:1.6">
+      💡 Przykłady pytań: <em>"Stać mnie na wydatek 500 zł?"</em> · <em>"Jak przyspieszy się spłata długów jeśli dołożę 200 zł/mc?"</em> · <em>"Ile wydaję miesięcznie na subskrypcje?"</em>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden;display:flex;flex-direction:column;height:560px">
+    <div id="advisor-messages" style="flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px"></div>
+    <div style="border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:8px;align-items:flex-end">
+      <textarea id="advisor-input" placeholder="Napisz pytanie o swoje finanse..." style="flex:1;padding:10px 12px;border:1px solid var(--border2);border-radius:var(--rsm);background:var(--bg2);color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;resize:none;height:44px;outline:none" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAdvisorMessage();}"></textarea>
+      <button class="btn-p" id="advisor-send-btn" onclick="sendAdvisorMessage()" style="flex-shrink:0;height:44px">Wyślij</button>
+    </div>
   </div>
 </div>
 
@@ -811,7 +1007,7 @@ function goPage(p){
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('page-'+p).classList.add('active');
-  const pages = ['dashboard','income','expenses','transactions','stats','budget','goals','plan','add'];
+  const pages = ['dashboard','income','expenses','transactions','stats','budget','goals','plan','debts','subs','impulse','advisor','add'];
   const nb = document.querySelectorAll('.nav-btn');
   const idx = pages.indexOf(p);
   if(idx>=0) nb[idx].classList.add('active');
@@ -826,6 +1022,10 @@ function renderPage(){
   else if(curPage==='budget') renderBudget();
   else if(curPage==='goals') renderGoals();
   else if(curPage==='plan') renderPlan();
+  else if(curPage==='debts') renderDebts();
+  else if(curPage==='subs') renderSubs();
+  else if(curPage==='impulse') renderImpulse();
+  else if(curPage==='advisor') renderAdvisor();
 }
 
 // ═══════════════════════════════════════════════════
@@ -897,6 +1097,39 @@ function renderDash(){
   document.getElementById('d-s-train-s').textContent = tx.filter(t=>t.cat==='Plan treningowy'&&isIncome(t)).length+' klientów';
   document.getElementById('d-s-other').textContent = fmt(otherInc);
   document.getElementById('d-s-other-s').textContent = tx.filter(t=>isIncome(t)&&!['Wynagrodzenie','Plan treningowy'].includes(t.cat)).length+' pozycji';
+
+  // POPRAWKA: Połączony widok zobowiązań (długi + subskrypcje) — jedno miejsce, poczucie kontroli
+  const debts = getDebts();
+  const subs = getSubs();
+  const activeSubs = subs.filter(s=>s.active!==false);
+  const totalDebt = debts.reduce((s,d)=>s+d.balance,0);
+  const minPayments = debts.reduce((s,d)=>s+(d.minPayment||0),0);
+  const monthlySubsCost = activeSubs.reduce((s,x)=> s + (x.cycle==='monthly'?x.amount:x.amount/12), 0);
+  document.getElementById('d-obl-debt').textContent = fmt(totalDebt);
+  document.getElementById('d-obl-debt-count').textContent = debts.length+' zobowiązań';
+  document.getElementById('d-obl-subs').textContent = fmt(monthlySubsCost);
+  document.getElementById('d-obl-subs-count').textContent = activeSubs.length+' aktywnych';
+  document.getElementById('d-obl-total').textContent = fmt(minPayments+monthlySubsCost);
+
+  // POPRAWKA: Alert o subskrypcjach odnawiających się w ciągu 3 dni
+  const now = new Date();
+  const in3days = new Date(now.getTime()+3*86400000);
+  const renewingSoon = activeSubs.filter(s=>{
+    if(!s.nextDate) return false;
+    const nd = new Date(s.nextDate);
+    return nd>=now && nd<=in3days;
+  });
+  const alertEl = document.getElementById('d-renewal-alert');
+  if(renewingSoon.length){
+    alertEl.style.display='block';
+    alertEl.innerHTML = renewingSoon.map(s=>{
+      const days = Math.ceil((new Date(s.nextDate)-now)/86400000);
+      return `<div style="font-size:12.5px;color:var(--amber);margin-bottom:4px">⏰ <strong>Za ${days} dni</strong> odnawia się <strong>${s.name}</strong> za ${fmt(s.amount)} — używałeś tego w tym miesiącu?
+        <button class="btn-s" style="font-size:10px;padding:2px 8px;margin-left:6px" onclick="goPage('subs')">Zobacz →</button></div>`;
+    }).join('');
+  } else {
+    alertEl.style.display='none';
+  }
 
   destroyChart('d');
   if(sorted.length){
@@ -1661,6 +1894,437 @@ function saveEnvelope(){
   renderPlan();
 }
 function delEnv(i){ const envs=getEnvelopes(); envs.splice(i,1); saveEnvelopes(envs); renderPlan(); }
+
+// ═══════════════════════════════════════════════════
+// ZADŁUŻENIE
+// ═══════════════════════════════════════════════════
+function getDebts(){ return JSON.parse(localStorage.getItem('budzet_debts')||'[]'); }
+function saveDebtsData(d){ localStorage.setItem('budzet_debts', JSON.stringify(d)); }
+const DEBT_TYPE_LABEL = {karta:'💳', rodzina:'👤', pozyczka:'🏦', inne:'📋'};
+
+function showAddDebt(){
+  document.getElementById('debt-form-title').textContent='Nowy dług';
+  document.getElementById('debt-edit-id').value='';
+  ['debt-name','debt-balance','debt-rate','debt-min-payment','debt-original','debt-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('debt-type').value='karta';
+  document.getElementById('debt-form-modal').style.display='block';
+}
+function closeDebtForm(){ document.getElementById('debt-form-modal').style.display='none'; }
+
+function editDebt(id){
+  const d=getDebts().find(x=>x.id===id);
+  if(!d) return;
+  document.getElementById('debt-form-title').textContent='Edytuj dług';
+  document.getElementById('debt-edit-id').value=id;
+  document.getElementById('debt-name').value=d.name;
+  document.getElementById('debt-type').value=d.type;
+  document.getElementById('debt-balance').value=d.balance;
+  document.getElementById('debt-rate').value=d.rate||'';
+  document.getElementById('debt-min-payment').value=d.minPayment||'';
+  document.getElementById('debt-original').value=d.original||'';
+  document.getElementById('debt-notes').value=d.notes||'';
+  document.getElementById('debt-form-modal').style.display='block';
+}
+
+function saveDebtForm(){
+  const name=document.getElementById('debt-name').value.trim();
+  const balance=parseFloat(document.getElementById('debt-balance').value)||0;
+  if(!name || balance<=0){ alert('Podaj nazwę i saldo długu.'); return; }
+  const editId=document.getElementById('debt-edit-id').value;
+  const debt = {
+    id: editId ? parseInt(editId) : Date.now(),
+    name,
+    type: document.getElementById('debt-type').value,
+    balance,
+    rate: parseFloat(document.getElementById('debt-rate').value)||null,
+    minPayment: parseFloat(document.getElementById('debt-min-payment').value)||0,
+    original: parseFloat(document.getElementById('debt-original').value)||null,
+    notes: document.getElementById('debt-notes').value.trim()
+  };
+  let debts=getDebts();
+  if(editId){ debts=debts.map(d=>d.id===debt.id?debt:d); } else { debts.push(debt); }
+  saveDebtsData(debts);
+  closeDebtForm();
+  renderDebts();
+}
+
+function deleteDebt(id){
+  if(!confirm('Usunąć ten dług z listy? (to tylko usuwa wpis w aplikacji, nie wpływa na rzeczywiste zobowiązanie)')) return;
+  saveDebtsData(getDebts().filter(d=>d.id!==id));
+  renderDebts();
+}
+
+let debtStrategy = localStorage.getItem('budzet_debt_strategy') || 'avalanche';
+function setDebtStrategy(s){ debtStrategy=s; localStorage.setItem('budzet_debt_strategy', s); renderDebts(); }
+
+function renderDebts(){
+  const debts=getDebts();
+  const total=debts.reduce((s,d)=>s+d.balance,0);
+  const minSum=debts.reduce((s,d)=>s+(d.minPayment||0),0);
+  const withOriginal=debts.filter(d=>d.original>0);
+  const paidTotal=withOriginal.reduce((s,d)=>s+(d.original-d.balance),0);
+  const origTotal=withOriginal.reduce((s,d)=>s+d.original,0);
+
+  document.getElementById('d-total').textContent=fmt(total);
+  document.getElementById('d-min').textContent=fmt(minSum);
+  document.getElementById('d-paid').textContent=fmt(paidTotal);
+  document.getElementById('d-paid-pct').textContent = origTotal>0 ? (paidTotal/origTotal*100).toFixed(0)+'% spłacone' : 'dodaj saldo początkowe by śledzić postęp';
+
+  const snowBtn=document.getElementById('strat-snowball'), avaBtn=document.getElementById('strat-avalanche');
+  [snowBtn,avaBtn].forEach(b=>{b.style.background='';b.style.color='';b.style.borderColor='';});
+  const activeBtn = debtStrategy==='snowball'?snowBtn:avaBtn;
+  activeBtn.style.background='var(--accent)'; activeBtn.style.color='#fff'; activeBtn.style.borderColor='var(--accent)';
+
+  const sorted = [...debts].sort((a,b)=> debtStrategy==='snowball' ? a.balance-b.balance : (b.rate||0)-(a.rate||0));
+  document.getElementById('debt-strategy-order').innerHTML = sorted.length ?
+    '<strong>Kolejność spłaty (dodatkowe środki ponad minimum kieruj tutaj):</strong><br>' +
+    sorted.map((d,i)=>`${i+1}. ${d.name} — ${fmt(d.balance)}${d.rate?` (${d.rate}%)`:''}`).join('<br>')
+    : 'Dodaj długi, żeby zobaczyć sugerowaną kolejność spłaty.';
+
+  document.getElementById('debts-list').innerHTML = debts.length ? debts.map(d=>{
+    const pct = d.original>0 ? Math.max(0,Math.min(100,(d.original-d.balance)/d.original*100)).toFixed(0) : null;
+    return `<div class="cat-row">
+      <div class="ci" style="background:var(--red-bg)">${DEBT_TYPE_LABEL[d.type]||'📋'}</div>
+      <span class="cn">${d.name}${d.rate?` <span style="color:var(--text3);font-size:11px">(${d.rate}%/rok)</span>`:''}</span>
+      <div style="flex:1;margin:0 10px">
+        ${pct!==null ? `<div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--green);border-radius:3px"></div></div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">${pct}% spłacone z ${fmt(d.original)}</div>`
+        : `<div style="font-size:11px;color:var(--text3)">min. rata: ${fmt(d.minPayment||0)}</div>`}
+      </div>
+      <span style="font-size:13px;font-weight:600;color:var(--red);min-width:90px;text-align:right">${fmt(d.balance)}</span>
+      <button onclick="editDebt(${d.id})" title="Edytuj" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;margin-left:8px">✏️</button>
+      <button onclick="deleteDebt(${d.id})" title="Usuń" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px">✕</button>
+    </div>`;
+  }).join('') : '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Brak zapisanych długów. Kliknij "+ Dodaj dług", żeby zacząć śledzić spłatę.</div>';
+}
+
+// ═══════════════════════════════════════════════════
+// SUBSKRYPCJE
+// ═══════════════════════════════════════════════════
+function getSubs(){ return JSON.parse(localStorage.getItem('budzet_subs')||'[]'); }
+function saveSubsData(s){ localStorage.setItem('budzet_subs', JSON.stringify(s)); }
+
+function showAddSub(){
+  document.getElementById('sub-edit-id').value='';
+  ['sub-name','sub-amount','sub-next-date'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('sub-cycle').value='monthly';
+  document.getElementById('sub-form-modal').style.display='block';
+}
+function closeSubForm(){ document.getElementById('sub-form-modal').style.display='none'; }
+
+function editSub(id){
+  const s=getSubs().find(x=>x.id===id);
+  if(!s) return;
+  document.getElementById('sub-edit-id').value=id;
+  document.getElementById('sub-name').value=s.name;
+  document.getElementById('sub-amount').value=s.amount;
+  document.getElementById('sub-cycle').value=s.cycle;
+  document.getElementById('sub-next-date').value=s.nextDate||'';
+  document.getElementById('sub-form-modal').style.display='block';
+}
+
+function saveSubForm(){
+  const name=document.getElementById('sub-name').value.trim();
+  const amount=parseFloat(document.getElementById('sub-amount').value)||0;
+  if(!name || amount<=0){ alert('Podaj nazwę i kwotę subskrypcji.'); return; }
+  const editId=document.getElementById('sub-edit-id').value;
+  const sub={ id: editId?parseInt(editId):Date.now(), name, amount, cycle: document.getElementById('sub-cycle').value, nextDate: document.getElementById('sub-next-date').value, active: true };
+  let subs=getSubs();
+  const existing = editId ? subs.find(s=>s.id===sub.id) : null;
+  if(existing) sub.active = existing.active;
+  if(editId){ subs=subs.map(s=>s.id===sub.id?sub:s); } else { subs.push(sub); }
+  saveSubsData(subs);
+  closeSubForm();
+  renderSubs();
+}
+
+function deleteSub(id){ if(!confirm('Usunąć tę subskrypcję z listy?')) return; saveSubsData(getSubs().filter(s=>s.id!==id)); renderSubs(); }
+function toggleSubActive(id){ const subs=getSubs().map(s=> s.id===id?{...s,active:!s.active}:s); saveSubsData(subs); renderSubs(); }
+
+function renderSubs(){
+  const subs=getSubs();
+  const active=subs.filter(s=>s.active!==false);
+  const monthly=active.reduce((sum,s)=> sum + (s.cycle==='monthly'?s.amount:s.amount/12), 0);
+  document.getElementById('s-monthly').textContent=fmt(monthly);
+  document.getElementById('s-yearly').textContent=fmt(monthly*12);
+  document.getElementById('s-count').textContent=active.length;
+  const inactive = subs.length-active.length;
+  document.getElementById('s-flagged').textContent = inactive>0 ? inactive+' oznaczonych do anulowania' : 'wszystkie aktywne';
+
+  // POPRAWKA: alert o odnawiających się subskrypcjach w ciągu 3 dni
+  const now2 = new Date();
+  const in3days2 = new Date(now2.getTime()+3*86400000);
+  const renewingSoon2 = active.filter(s=>{ if(!s.nextDate) return false; const nd=new Date(s.nextDate); return nd>=now2 && nd<=in3days2; });
+  const sAlertEl = document.getElementById('s-renewal-alert');
+  if(renewingSoon2.length){
+    sAlertEl.style.display='block';
+    sAlertEl.innerHTML = renewingSoon2.map(s=>{
+      const days = Math.ceil((new Date(s.nextDate)-now2)/86400000);
+      return `<div style="font-size:12.5px;color:var(--amber);margin-bottom:4px">⏰ <strong>Za ${days} dni</strong> odnawia się <strong>${s.name}</strong> za ${fmt(s.amount)} — używałeś tego w tym miesiącu?</div>`;
+    }).join('');
+  } else { sAlertEl.style.display='none'; }
+
+  document.getElementById('subs-list').innerHTML = subs.length ? subs.slice().sort((a,b)=>b.amount-a.amount).map(s=>{
+    const monthlyEq = s.cycle==='monthly'?s.amount:s.amount/12;
+    return `<div class="cat-row" style="${s.active===false?'opacity:.45':''}">
+      <div class="ci" style="background:var(--blue-bg)">🔁</div>
+      <span class="cn">${s.name}${s.active===false?' <span style="font-size:10px;color:var(--red)">(do anulowania)</span>':''}</span>
+      <div style="flex:1;margin:0 10px;font-size:11px;color:var(--text3)">${s.cycle==='monthly'?'miesięcznie':'rocznie'}${s.nextDate?' · najbliższa: '+new Date(s.nextDate).toLocaleDateString('pl-PL'):''}</div>
+      <span style="font-size:13px;font-weight:600;min-width:100px;text-align:right">${fmt(s.amount)} <span style="font-size:10px;color:var(--text3);font-weight:400">(~${fmt(monthlyEq)}/mc)</span></span>
+      <button onclick="toggleSubActive(${s.id})" title="${s.active===false?'Przywróć':'Oznacz do anulowania'}" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;margin-left:8px">${s.active===false?'↺':'🚫'}</button>
+      <button onclick="editSub(${s.id})" title="Edytuj" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px">✏️</button>
+      <button onclick="deleteSub(${s.id})" title="Usuń" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px">✕</button>
+    </div>`;
+  }).join('') : '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Brak zapisanych subskrypcji.</div>';
+}
+
+// ═══════════════════════════════════════════════════
+// KONTROLA ZAKUPÓW IMPULSYWNYCH
+// ═══════════════════════════════════════════════════
+function getImpulse(){ return JSON.parse(localStorage.getItem('budzet_impulse')||'[]'); }
+function saveImpulseData(l){ localStorage.setItem('budzet_impulse', JSON.stringify(l)); }
+
+function showAddImpulse(){
+  ['imp-item','imp-price','imp-trigger'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('imp-wait').value='48';
+  document.getElementById('imp-mood').value='';
+  document.getElementById('imp-planned').value='';
+  document.getElementById('imp-frequency').value='0';
+  document.getElementById('impulse-form-modal').style.display='block';
+}
+function closeImpulseForm(){ document.getElementById('impulse-form-modal').style.display='none'; }
+
+function saveImpulseForm(){
+  const item=document.getElementById('imp-item').value.trim();
+  const price=parseFloat(document.getElementById('imp-price').value)||0;
+  if(!item){ alert('Napisz co chcesz kupić.'); return; }
+  const waitHours=parseInt(document.getElementById('imp-wait').value);
+  const now=Date.now();
+  const entry={ id: now, item, price, trigger: document.getElementById('imp-trigger').value.trim(), mood: document.getElementById('imp-mood').value, planned: document.getElementById('imp-planned').value, frequency: document.getElementById('imp-frequency').value, addedAt: now, waitUntil: now + waitHours*3600*1000, status: 'waiting' };
+  const list=getImpulse();
+  list.unshift(entry);
+  saveImpulseData(list);
+  closeImpulseForm();
+  renderImpulse();
+}
+
+function decideImpulse(id, decision){
+  const list=getImpulse().map(e=> e.id===id ? {...e, status:decision, decidedAt:Date.now()} : e);
+  saveImpulseData(list);
+  renderImpulse();
+}
+function extendImpulse(id){
+  const list=getImpulse().map(e=> e.id===id ? {...e, waitUntil: e.waitUntil + 24*3600*1000} : e);
+  saveImpulseData(list);
+  renderImpulse();
+}
+function deleteImpulseEntry(id){ saveImpulseData(getImpulse().filter(e=>e.id!==id)); renderImpulse(); }
+
+function renderImpulse(){
+  const list=getImpulse();
+  const saved=list.filter(e=>e.status==='skipped').reduce((s,e)=>s+e.price,0);
+  const waiting=list.filter(e=>e.status==='waiting');
+  const waitingSum=waiting.reduce((s,e)=>s+e.price,0);
+  const bought=list.filter(e=>e.status==='bought').reduce((s,e)=>s+e.price,0);
+
+  document.getElementById('i-saved').textContent=fmt(saved);
+  document.getElementById('i-waiting').textContent=fmt(waitingSum);
+  document.getElementById('i-waiting-count').textContent=waiting.length+' pozycji czeka';
+  document.getElementById('i-bought').textContent=fmt(bought);
+
+  // POPRAWKA: retrospektywa tygodniowa — wzorce nastroju i pory dnia
+  const weekAgo = Date.now() - 7*86400000;
+  const weekEntries = list.filter(e=>e.addedAt>=weekAgo);
+  const retroCard = document.getElementById('impulse-retro-card');
+  if(weekEntries.length){
+    retroCard.style.display='block';
+    const weekBought = weekEntries.filter(e=>e.status==='bought').reduce((s,e)=>s+e.price,0);
+    const weekSkipped = weekEntries.filter(e=>e.status==='skipped').reduce((s,e)=>s+e.price,0);
+    const decided = weekEntries.filter(e=>e.status!=='waiting');
+    const successRate = decided.length ? Math.round(weekEntries.filter(e=>e.status==='skipped').length/decided.length*100) : null;
+
+    // Wzorzec nastroju
+    const moodLabels = {spokojny:'😌 Spokojny',znudzony:'😴 Znudzony',zestresowany:'😩 Zestresowany',smutny:'😔 Smutny/dołek',podekscytowany:'😃 Podekscytowany'};
+    const moodCounts = {};
+    weekEntries.forEach(e=>{ if(e.mood) moodCounts[e.mood]=(moodCounts[e.mood]||0)+1; });
+    const topMood = Object.entries(moodCounts).sort((a,b)=>b[1]-a[1])[0];
+
+    // Wzorzec pory dnia
+    const timeBuckets = {'Noc (0-6)':0,'Rano (6-12)':0,'Popołudnie (12-18)':0,'Wieczór (18-24)':0};
+    weekEntries.forEach(e=>{
+      const h = new Date(e.addedAt).getHours();
+      if(h<6) timeBuckets['Noc (0-6)']++;
+      else if(h<12) timeBuckets['Rano (6-12)']++;
+      else if(h<18) timeBuckets['Popołudnie (12-18)']++;
+      else timeBuckets['Wieczór (18-24)']++;
+    });
+    const topTime = Object.entries(timeBuckets).sort((a,b)=>b[1]-a[1])[0];
+
+    document.getElementById('impulse-retro').innerHTML = `
+      <div class="mg mg-3" style="margin-bottom:14px">
+        <div class="mc" style="background:var(--bg2)"><div class="ml">Wydano na impuls</div><div class="mv r">${fmt(weekBought)}</div><div class="ms">ostatnie 7 dni</div></div>
+        <div class="mc" style="background:var(--bg2)"><div class="ml">Zaoszczędzono</div><div class="mv g">${fmt(weekSkipped)}</div><div class="ms">ostatnie 7 dni</div></div>
+        <div class="mc" style="background:var(--bg2)"><div class="ml">Skuteczność</div><div class="mv n">${successRate!==null?successRate+'%':'—'}</div><div class="ms">rezygnacji wśród rozstrzygniętych</div></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);line-height:1.8">
+        ${topMood ? `💭 Najczęściej zgłaszałeś chęć zakupu, gdy czułeś się: <strong>${moodLabels[topMood[0]]||topMood[0]}</strong> (${topMood[1]}×)<br>` : ''}
+        ${topTime && topTime[1]>0 ? `🕐 Najczęstsza pora: <strong>${topTime[0]}</strong> (${topTime[1]}× z ${weekEntries.length})` : ''}
+      </div>`;
+  } else {
+    retroCard.style.display='none';
+  }
+
+  const now=Date.now();
+  document.getElementById('impulse-list').innerHTML = list.length ? list.map(e=>{
+    const msLeft = e.waitUntil-now;
+    const ready = msLeft<=0;
+    const hoursLeft = Math.max(0,Math.ceil(msLeft/3600000));
+    let statusBadge='', actions='', reflectionReminder='';
+    if(e.status==='waiting'){
+      if(ready){
+        statusBadge=`<span style="font-size:10px;background:var(--amber-bg);color:var(--amber);padding:2px 7px;border-radius:20px;font-weight:600">⏰ Czas minął</span>`;
+        actions=`<button onclick="decideImpulse(${e.id},'bought')" style="background:var(--red-bg);color:var(--red);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-left:6px">Kupiłem</button>
+                 <button onclick="decideImpulse(${e.id},'skipped')" style="background:var(--green-bg);color:var(--green);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-left:4px">Zrezygnowałem 🎉</button>
+                 <button onclick="extendImpulse(${e.id})" style="background:none;color:var(--text3);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-left:4px">+24h</button>`;
+        // POPRAWKA: przypomnienie własnych odpowiedzi z momentu dodania — friction + refleksja zamiast twardego zakazu
+        const reminders=[];
+        if(e.planned==='nie') reminders.push('sam(a) napisałeś/aś, że to <strong>nie było</strong> zaplanowane w budżecie');
+        if(e.planned==='niepewne') reminders.push('nie byłeś/aś pewien/pewna, czy to było zaplanowane');
+        if(e.frequency==='2'||e.frequency==='3+') reminders.push(`to już ${e.frequency==='3+'?'3. lub kolejny':'2.'} podobny zakup pod wpływem impulsu w tym tygodniu`);
+        if(e.mood==='zestresowany'||e.mood==='smutny'||e.mood==='znudzony') reminders.push(`dodałeś/aś to w stanie: ${e.mood==='zestresowany'?'zestresowany 😩':e.mood==='smutny'?'smutny/dołek 😔':'znudzony 😴'}`);
+        if(reminders.length){
+          reflectionReminder=`<div style="width:100%;background:var(--amber-bg);border-left:3px solid var(--amber);border-radius:6px;padding:8px 12px;margin-top:6px;font-size:11.5px;color:var(--text2);line-height:1.6">
+            💭 <strong>Przypomnienie:</strong> ${reminders.join(', ')}. Czy to nadal ma sens?
+          </div>`;
+        }
+      } else {
+        statusBadge=`<span style="font-size:10px;background:var(--blue-bg);color:var(--blue);padding:2px 7px;border-radius:20px;font-weight:600">⏳ Jeszcze ${hoursLeft}h</span>`;
+        actions=`<button onclick="decideImpulse(${e.id},'skipped')" style="background:var(--green-bg);color:var(--green);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-left:6px">Już nie chcę</button>`;
+      }
+    } else if(e.status==='bought'){
+      statusBadge=`<span style="font-size:10px;background:var(--red-bg);color:var(--red);padding:2px 7px;border-radius:20px;font-weight:600">Kupione</span>`;
+    } else {
+      statusBadge=`<span style="font-size:10px;background:var(--green-bg);color:var(--green);padding:2px 7px;border-radius:20px;font-weight:600">✓ Zaoszczędzone</span>`;
+    }
+    return `<div class="cat-row" style="flex-wrap:wrap;row-gap:6px">
+      <div class="ci" style="background:var(--purple-bg)">🛍️</div>
+      <span class="cn">${e.item}${e.trigger?` <span style="font-size:10px;color:var(--text3)">— ${e.trigger}</span>`:''}</span>
+      <div style="flex:1"></div>
+      <span style="font-size:13px;font-weight:600;min-width:70px;text-align:right">${fmt(e.price)}</span>
+      ${statusBadge}
+      ${actions}
+      <button onclick="deleteImpulseEntry(${e.id})" title="Usuń wpis" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;margin-left:6px">✕</button>
+      ${reflectionReminder}
+    </div>`;
+  }).join('') : '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Lista pusta. Gdy najdzie Cię ochota na zakup — dodaj go tutaj zamiast kupować od razu!</div>';
+}
+
+// ═══════════════════════════════════════════════════
+// DORADCA AI — czat z kontekstem finansowym
+// ═══════════════════════════════════════════════════
+const ADVISOR_PROXY = 'https://anthropic-proxy.teamprogress2018.workers.dev';
+
+function getAdvisorChat(){ return JSON.parse(localStorage.getItem('budzet_advisor_chat')||'[]'); }
+function saveAdvisorChat(msgs){ localStorage.setItem('budzet_advisor_chat', JSON.stringify(msgs)); }
+function clearAdvisorChat(){ if(!confirm('Wyczyścić całą rozmowę z doradcą?')) return; saveAdvisorChat([]); renderAdvisor(); }
+
+function buildAdvisorContext(){
+  const months = getMonths();
+  const {inc,exp,balance} = mdata(curMonth);
+  const debts = getDebts();
+  const subs = getSubs().filter(s=>s.active!==false);
+  const totalDebt = debts.reduce((s,d)=>s+d.balance,0);
+  const minPayments = debts.reduce((s,d)=>s+(d.minPayment||0),0);
+  const monthlySubsCost = subs.reduce((s,x)=> s + (x.cycle==='monthly'?x.amount:x.amount/12), 0);
+
+  // Średnia z ostatnich do 3 miesięcy dla bardziej wiarygodnego obrazu (nie tylko bieżący miesiąc)
+  const lastMonths = months.slice(-3);
+  const avgInc = lastMonths.length ? lastMonths.reduce((s,m)=>s+mdata(m).inc,0)/lastMonths.length : inc;
+  const avgExp = lastMonths.length ? lastMonths.reduce((s,m)=>s+mdata(m).exp,0)/lastMonths.length : exp;
+
+  const impulseList = getImpulse();
+  const weekAgo = Date.now()-7*86400000;
+  const weekImpulse = impulseList.filter(e=>e.addedAt>=weekAgo);
+  const weekBought = weekImpulse.filter(e=>e.status==='bought').reduce((s,e)=>s+e.price,0);
+  const weekSkipped = weekImpulse.filter(e=>e.status==='skipped').reduce((s,e)=>s+e.price,0);
+
+  let ctx = `Jesteś osobistym doradcą finansowym w polskiej aplikacji budżetowej. Użytkownik ma ADHD i czasem robi zakupy impulsywne — bądź konkretny, rzeczowy, wspierający, bez moralizowania. Odpowiadaj krótko i praktycznie, z konkretnymi liczbami.
+
+DANE UŻYTKOWNIKA:
+Bieżący miesiąc (${curMonth}): przychody ${fmt(inc)}, wydatki ${fmt(exp)}, bilans ${fmt(balance,true)}.
+Średnio z ostatnich ${lastMonths.length} mies.: przychody ${fmt(avgInc)}, wydatki ${fmt(avgExp)}, wolne środki ~${fmt(avgInc-avgExp)}/mc.
+
+DŁUGI (łącznie ${fmt(totalDebt)}, min. raty razem ${fmt(minPayments)}/mc):
+${debts.length ? debts.map(d=>`- ${d.name}: ${fmt(d.balance)}${d.rate?`, ${d.rate}% rocznie`:''}, min. rata ${fmt(d.minPayment||0)}`).join('\n') : '(brak zapisanych długów)'}
+
+SUBSKRYPCJE (aktywne, razem ~${fmt(monthlySubsCost)}/mc):
+${subs.length ? subs.map(s=>`- ${s.name}: ${fmt(s.amount)} (${s.cycle==='monthly'?'miesięcznie':'rocznie'})`).join('\n') : '(brak zapisanych subskrypcji)'}
+
+KONTROLA ZAKUPÓW IMPULSYWNYCH (ostatnie 7 dni):
+Kupione mimo bufora czasowego: ${fmt(weekBought)}. Zaoszczędzone dzięki rezygnacji: ${fmt(weekSkipped)}.
+
+Gdy użytkownik pyta "czy stać mnie na X" — porównaj kwotę z wolnymi środkami miesięcznymi (średnia przychody minus wydatki minus miesięczne obciążenie z długów/subskrypcji) i odpowiedz wprost tak/nie/ostrożnie, z uzasadnieniem liczbowym. Gdy pyta o przyspieszenie spłaty długu dodatkową kwotą — przelicz w miesiącach na podstawie podanych sald (jeśli brak oprocentowania, licz liniowo; jeśli jest oprocentowanie, uwzględnij je w przybliżeniu).`;
+  return ctx;
+}
+
+function renderAdvisorMessage(role, content){
+  const isUser = role==='user';
+  return `<div style="display:flex;${isUser?'justify-content:flex-end':''}">
+    <div style="max-width:75%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.6;white-space:pre-wrap;${isUser?'background:var(--accent);color:#fff;border-bottom-right-radius:3px':'background:var(--bg2);color:var(--text);border-bottom-left-radius:3px'}">${content}</div>
+  </div>`;
+}
+
+function renderAdvisor(){
+  const msgs = getAdvisorChat();
+  const el = document.getElementById('advisor-messages');
+  if(!msgs.length){
+    el.innerHTML = renderAdvisorMessage('assistant', 'Cześć! Znam Twoje bieżące wydatki, długi i subskrypcje. Zapytaj mnie np. "stać mnie na wydatek 300 zł?" albo "jak przyspieszyć spłatę długów?" 💬');
+  } else {
+    el.innerHTML = msgs.map(m=>renderAdvisorMessage(m.role, m.content)).join('');
+  }
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendAdvisorMessage(){
+  const input = document.getElementById('advisor-input');
+  const text = input.value.trim();
+  if(!text) return;
+  const btn = document.getElementById('advisor-send-btn');
+
+  let msgs = getAdvisorChat();
+  msgs.push({role:'user', content:text});
+  saveAdvisorChat(msgs);
+  input.value='';
+  renderAdvisor();
+
+  // Wskaźnik ładowania
+  const el = document.getElementById('advisor-messages');
+  el.innerHTML += renderAdvisorMessage('assistant','⏳ Myślę...');
+  el.scrollTop = el.scrollHeight;
+  btn.disabled = true;
+
+  try {
+    const apiMessages = msgs.slice(-20).map(m=>({role:m.role, content:m.content}));
+    const resp = await fetch(ADVISOR_PROXY, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:800, system: buildAdvisorContext(), messages: apiMessages })
+    });
+    const data = await resp.json();
+    if(data.error) throw new Error(data.error.message || 'Błąd API');
+    const reply = (data.content||[]).map(b=>b.text||'').join('').trim() || 'Nie udało się wygenerować odpowiedzi.';
+    msgs = getAdvisorChat();
+    msgs.push({role:'assistant', content:reply});
+    saveAdvisorChat(msgs);
+  } catch(e) {
+    msgs = getAdvisorChat();
+    msgs.push({role:'assistant', content:'❌ Błąd połączenia z doradcą: '+e.message+'. Spróbuj ponownie.'});
+    saveAdvisorChat(msgs);
+  } finally {
+    btn.disabled = false;
+    renderAdvisor();
+  }
+}
 
 // ═══════════════════════════════════════════════════
 // THEME
