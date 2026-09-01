@@ -1303,6 +1303,7 @@ function renderIncome(){
 // Dashboard, Przychody i Transakcje czytają to samo — bez drugiej kopii.
 // ═══════════════════════════════════════════════════
 const DAYS_PL = ['niedziela','poniedziałek','wtorek','środa','czwartek','piątek','sobota'];
+const MONTHS_PL_GEN = ['stycznia','lutego','marca','kwietnia','maja','czerwca','lipca','sierpnia','września','października','listopada','grudnia'];
 let schedDate = null;
 let schedPeriod = 'day';
 let schedGuest = false;
@@ -1349,10 +1350,16 @@ function startOfISOWeek(d){
 }
 function formatDayLabel(iso){
   const d=parseISODate(iso);
-  return DAYS_PL[d.getDay()]+', '+d.getDate()+' '+MONTHS_PL[d.getMonth()].toLowerCase()+' '+d.getFullYear();
+  return DAYS_PL[d.getDay()]+', '+d.getDate()+' '+MONTHS_PL_GEN[d.getMonth()]+' '+d.getFullYear();
 }
 function formatShortDate(d){
-  return d.getDate()+' '+MONTHS_PL[d.getMonth()].toLowerCase();
+  return d.getDate()+' '+MONTHS_PL_GEN[d.getMonth()];
+}
+function treningLabel(n){
+  const n10=n%10, n100=n%100;
+  if(n===1) return '1 trening';
+  if(n10>=2 && n10<=4 && (n100<12 || n100>14)) return n+' treningi';
+  return n+' treningów';
 }
 function schedRange(iso, period){
   const d=parseISODate(iso);
@@ -1462,8 +1469,8 @@ function renderSchedule(){
   document.getElementById('sched-sum-total').textContent=fmt(total);
   document.getElementById('sched-sum-cash').textContent=fmt(cash);
   document.getElementById('sched-sum-bank').textContent=fmt(bank);
-  document.getElementById('sched-sum-n').textContent=inRange.length+(inRange.length===1?' trening':' treningów');
-  document.getElementById('sched-range-count').textContent=inRange.length ? inRange.length+' treningów w okresie' : 'brak treningów w tym okresie';
+  document.getElementById('sched-sum-n').textContent=treningLabel(inRange.length);
+  document.getElementById('sched-range-count').textContent=inRange.length ? treningLabel(inRange.length)+' w okresie' : 'brak treningów w tym okresie';
 
   document.getElementById('sched-day-title').textContent='Treningi — '+formatDayLabel(schedDate);
   const dayList=data
