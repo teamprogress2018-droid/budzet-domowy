@@ -147,6 +147,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .src-card .s-val{font-size:18px;font-weight:600;color:var(--green);font-family:'DM Mono',monospace}
 .src-card .s-count{font-size:10px;color:var(--text3);margin-top:3px}
 
+/* SEGMENTED TOGGLE */
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg .btn-s.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
 /* STATS */
 .trend-row{display:flex;align-items:center;gap:10px;padding:7px 18px;border-bottom:1px solid var(--border)}
 .trend-row:last-child{border-bottom:none}
@@ -222,6 +226,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </button>
     <button class="nav-btn" onclick="goPage('income')">
       <svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Przychody
+    </button>
+    <button class="nav-btn" onclick="goPage('schedule')">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Grafik zarobków
     </button>
     <button class="nav-btn" onclick="goPage('expenses')">
       <svg viewBox="0 0 24 24"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>Wydatki
@@ -351,6 +358,67 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="card-p" style="padding-bottom:4px"><div class="sh"><h3>Szczegóły</h3></div></div>
       <div id="inc-list"></div>
     </div>
+  </div>
+</div>
+
+<!-- SCHEDULE / GRAFIK ZAROBKÓW -->
+<div class="page" id="page-schedule">
+  <div class="ph"><div class="ph-left"><h2>Grafik zarobków</h2><p>Treningi personalne — każdy klient osobno, podsumowania automatycznie</p></div></div>
+
+  <div class="card form-card" style="margin-bottom:16px">
+    <div class="sec-lbl">Nowy trening</div>
+    <div class="frow f3">
+      <div class="fg"><label>Data</label><input id="sched-date" type="date" onchange="schedDate=this.value;renderSchedule()"></div>
+      <div class="fg"><label>Imię i nazwisko klienta</label><input id="sched-name" type="text" placeholder="np. Anna Kowalska"></div>
+      <div class="fg"><label>Kwota (zł)</label><input id="sched-amt" type="number" min="0.01" step="0.01" placeholder="0"></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>Towarzystwo</label>
+        <div class="seg" id="sched-guest-seg">
+          <button type="button" class="btn-s" id="sched-guest-solo" onclick="setSchedGuest(false)" style="flex:1">Sam</button>
+          <button type="button" class="btn-s" id="sched-guest-duo" onclick="setSchedGuest(true)" style="flex:1">Z osobą towarzyszącą</button>
+        </div>
+      </div>
+      <div class="fg"><label>Forma płatności</label>
+        <div class="seg" id="sched-pay-seg">
+          <button type="button" class="btn-s" id="sched-pay-cash" onclick="setSchedPay('cash')" style="flex:1">💵 Gotówka</button>
+          <button type="button" class="btn-s" id="sched-pay-bank" onclick="setSchedPay('bank')" style="flex:1">🏦 Przelew</button>
+        </div>
+      </div>
+    </div>
+    <div class="factions">
+      <button class="btn-p" onclick="addScheduleEntry()">Dodaj trening</button>
+      <span class="fstatus" id="sched-status"></span>
+    </div>
+  </div>
+
+  <div class="card card-p" style="margin-bottom:16px">
+    <div class="sh" style="margin-bottom:10px"><h3>Okres podsumowania</h3></div>
+    <div class="seg" id="sched-period-seg" style="margin-bottom:12px">
+      <button type="button" class="btn-s" onclick="setSchedPeriod('day')" id="sched-p-day" style="flex:1">Dzień</button>
+      <button type="button" class="btn-s" onclick="setSchedPeriod('week')" id="sched-p-week" style="flex:1">Tydzień</button>
+      <button type="button" class="btn-s" onclick="setSchedPeriod('month')" id="sched-p-month" style="flex:1">Miesiąc</button>
+      <button type="button" class="btn-s" onclick="setSchedPeriod('year')" id="sched-p-year" style="flex:1">Rok</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <button class="btn-s" onclick="shiftSchedDate(-1)" title="Poprzedni okres" style="padding:8px 12px">‹</button>
+      <div style="text-align:center;flex:1">
+        <div id="sched-range-label" style="font-size:15px;font-weight:600"></div>
+        <div id="sched-range-count" style="font-size:11px;color:var(--text3);margin-top:2px"></div>
+      </div>
+      <button class="btn-s" onclick="shiftSchedDate(1)" title="Następny okres" style="padding:8px 12px">›</button>
+    </div>
+  </div>
+
+  <div class="mg mg-3" style="margin-bottom:18px">
+    <div class="mc"><div class="ml">Łącznie</div><div class="mv g" id="sched-sum-total">—</div><div class="ms" id="sched-sum-n"></div></div>
+    <div class="mc"><div class="ml">Gotówka</div><div class="mv b" id="sched-sum-cash">—</div><div class="ms">wpłaty gotówkowe</div></div>
+    <div class="mc"><div class="ml">Przelew</div><div class="mv g" id="sched-sum-bank">—</div><div class="ms">wpłaty przelewem</div></div>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <div class="card-p" style="padding-bottom:4px"><div class="sh"><h3 id="sched-day-title">Treningi tego dnia</h3></div></div>
+    <div id="sched-day-list"></div>
   </div>
 </div>
 
@@ -1051,7 +1119,7 @@ function goPage(p){
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('page-'+p).classList.add('active');
-  const pages = ['dashboard','income','expenses','transactions','stats','budget','goals','plan','debts','subs','impulse','advisor','add'];
+  const pages = ['dashboard','income','schedule','expenses','transactions','stats','budget','goals','plan','debts','subs','impulse','advisor','add'];
   const nb = document.querySelectorAll('.nav-btn');
   const idx = pages.indexOf(p);
   if(idx>=0) nb[idx].classList.add('active');
@@ -1060,6 +1128,7 @@ function goPage(p){
 function renderPage(){
   if(curPage==='dashboard') renderDash();
   else if(curPage==='income') renderIncome();
+  else if(curPage==='schedule') renderSchedule();
   else if(curPage==='expenses') renderExpenses();
   else if(curPage==='transactions') renderTx();
   else if(curPage==='stats') renderStats();
@@ -1254,6 +1323,204 @@ function renderIncome(){
     return mb-ma||db-da;
   });
   document.getElementById('inc-list').innerHTML = incTx.map(txHtml).join('')||'<div class="tx-empty">Brak przychodów</div>';
+}
+
+// ═══════════════════════════════════════════════════
+// GRAFIK ZAROBKÓW (treningi personalne)
+// Jedno źródło prawdy: wpis = transakcja w `data` z cat "Plan treningowy".
+// Dashboard, Przychody i Transakcje czytają to samo — bez drugiej kopii.
+// ═══════════════════════════════════════════════════
+const DAYS_PL = ['niedziela','poniedziałek','wtorek','środa','czwartek','piątek','sobota'];
+const MONTHS_PL_GEN = ['stycznia','lutego','marca','kwietnia','maja','czerwca','lipca','sierpnia','września','października','listopada','grudnia'];
+let schedDate = null;
+let schedPeriod = 'day';
+let schedGuest = false;
+let schedPay = 'cash';
+
+function toISODate(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function parseISODate(iso){
+  const [y,m,d]=(iso||'').split('-').map(Number);
+  return new Date(y, (m||1)-1, d||1);
+}
+function isoToTxDate(iso){
+  const [y,m,d]=(iso||'').split('-');
+  if(!d) return '';
+  return d+'.'+m;
+}
+function isoToMonthLabel(iso){
+  const dt=parseISODate(iso);
+  if(isNaN(dt.getTime())) return curMonth;
+  return MONTHS_PL[dt.getMonth()]+' '+dt.getFullYear();
+}
+function txToISO(t){
+  if(t.iso) return t.iso;
+  if(!t.date||!t.month) return '';
+  const parts=t.date.split('.');
+  const dd=String(parseInt(parts[0],10)||0).padStart(2,'0');
+  const mm=parts[1] ? String(parseInt(parts[1],10)||0).padStart(2,'0') : '';
+  const mp=t.month.split(' ');
+  const year=mp[1];
+  const mi=MONTHS_PL.indexOf(mp[0]);
+  if(!dd||!mm||mi<0||!year) return '';
+  return year+'-'+mm+'-'+dd;
+}
+function isTrainingIncome(t){ return t.cat==='Plan treningowy' && t.amt>0; }
+function scheduleClientName(t){
+  return String(t.name||'').replace(/^Plan treningowy\s*[—–-]\s*/,'');
+}
+function startOfISOWeek(d){
+  const x=new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day=x.getDay();
+  x.setDate(x.getDate() + (day===0 ? -6 : 1-day));
+  return x;
+}
+function formatDayLabel(iso){
+  const d=parseISODate(iso);
+  return DAYS_PL[d.getDay()]+', '+d.getDate()+' '+MONTHS_PL_GEN[d.getMonth()]+' '+d.getFullYear();
+}
+function formatShortDate(d){
+  return d.getDate()+' '+MONTHS_PL_GEN[d.getMonth()];
+}
+function treningLabel(n){
+  const n10=n%10, n100=n%100;
+  if(n===1) return '1 trening';
+  if(n10>=2 && n10<=4 && (n100<12 || n100>14)) return n+' treningi';
+  return n+' treningów';
+}
+function schedRange(iso, period){
+  const d=parseISODate(iso);
+  if(period==='day'){
+    return {from:iso, to:iso, label: formatDayLabel(iso)};
+  }
+  if(period==='week'){
+    const start=startOfISOWeek(d);
+    const end=new Date(start.getFullYear(), start.getMonth(), start.getDate()+6);
+    return {from:toISODate(start), to:toISODate(end), label: formatShortDate(start)+' – '+formatShortDate(end)+' '+end.getFullYear()};
+  }
+  if(period==='month'){
+    const start=new Date(d.getFullYear(), d.getMonth(), 1);
+    const end=new Date(d.getFullYear(), d.getMonth()+1, 0);
+    return {from:toISODate(start), to:toISODate(end), label: MONTHS_PL[d.getMonth()]+' '+d.getFullYear()};
+  }
+  const start=new Date(d.getFullYear(), 0, 1);
+  const end=new Date(d.getFullYear(), 11, 31);
+  return {from:toISODate(start), to:toISODate(end), label: String(d.getFullYear())};
+}
+
+function setSchedGuest(v){ schedGuest=!!v; renderSchedule(); }
+function setSchedPay(v){ schedPay=v==='bank'?'bank':'cash'; renderSchedule(); }
+function setSchedPeriod(p){ schedPeriod=p; renderSchedule(); }
+
+function shiftSchedDate(dir){
+  if(!schedDate) schedDate=toISODate(new Date());
+  const d=parseISODate(schedDate);
+  if(schedPeriod==='day') d.setDate(d.getDate()+dir);
+  else if(schedPeriod==='week') d.setDate(d.getDate()+dir*7);
+  else if(schedPeriod==='month') d.setMonth(d.getMonth()+dir);
+  else d.setFullYear(d.getFullYear()+dir);
+  schedDate=toISODate(d);
+  const dateEl=document.getElementById('sched-date');
+  if(dateEl) dateEl.value=schedDate;
+  renderSchedule();
+}
+
+function addScheduleEntry(){
+  const dateEl=document.getElementById('sched-date');
+  const nameEl=document.getElementById('sched-name');
+  const amtEl=document.getElementById('sched-amt');
+  const statusEl=document.getElementById('sched-status');
+  const iso=dateEl.value || toISODate(new Date());
+  const client=nameEl.value.trim();
+  const amt=parseFloat(String(amtEl.value).replace(',','.'));
+  if(!client){ statusEl.textContent='Podaj imię i nazwisko klienta.'; statusEl.className='fstatus err'; return; }
+  if(!(amt>0)){ statusEl.textContent='Podaj kwotę większą od zera.'; statusEl.className='fstatus err'; return; }
+
+  const month=isoToMonthLabel(iso);
+  data.push({
+    id: Date.now(),
+    date: isoToTxDate(iso),
+    iso,
+    name: 'Plan treningowy — '+client,
+    cat: 'Plan treningowy',
+    amt,
+    month,
+    src: schedPay,
+    withGuest: schedGuest
+  });
+  save();
+  curMonth=month;
+  schedDate=iso;
+  nameEl.value='';
+  amtEl.value='';
+  statusEl.textContent='✓ Dodano trening: '+client;
+  statusEl.className='fstatus';
+  setTimeout(()=>{ if(statusEl.textContent.startsWith('✓')) statusEl.textContent=''; }, 3000);
+  renderSidebar();
+  renderSchedule();
+}
+
+function deleteScheduleTx(idx){
+  if(!confirm('Usunąć ten trening z grafiku i z transakcji?')) return;
+  data.splice(idx,1);
+  save();
+  renderSidebar();
+  renderSchedule();
+}
+
+function renderSchedule(){
+  if(!schedDate) schedDate=toISODate(new Date());
+  const dateEl=document.getElementById('sched-date');
+  if(dateEl && !dateEl.value) dateEl.value=schedDate;
+
+  document.getElementById('sched-guest-solo').classList.toggle('active', !schedGuest);
+  document.getElementById('sched-guest-duo').classList.toggle('active', !!schedGuest);
+  document.getElementById('sched-pay-cash').classList.toggle('active', schedPay==='cash');
+  document.getElementById('sched-pay-bank').classList.toggle('active', schedPay==='bank');
+  ['day','week','month','year'].forEach(p=>{
+    const el=document.getElementById('sched-p-'+p);
+    if(el) el.classList.toggle('active', schedPeriod===p);
+  });
+
+  const range=schedRange(schedDate, schedPeriod);
+  document.getElementById('sched-range-label').textContent=range.label;
+
+  const inRange=data.filter(t=>{
+    if(!isTrainingIncome(t)) return false;
+    const iso=txToISO(t);
+    return iso && iso>=range.from && iso<=range.to;
+  });
+  const total=inRange.reduce((s,t)=>s+t.amt,0);
+  const cash=inRange.filter(t=>t.src==='cash').reduce((s,t)=>s+t.amt,0);
+  const bank=total-cash;
+  document.getElementById('sched-sum-total').textContent=fmt(total);
+  document.getElementById('sched-sum-cash').textContent=fmt(cash);
+  document.getElementById('sched-sum-bank').textContent=fmt(bank);
+  document.getElementById('sched-sum-n').textContent=treningLabel(inRange.length);
+  document.getElementById('sched-range-count').textContent=inRange.length ? treningLabel(inRange.length)+' w okresie' : 'brak treningów w tym okresie';
+
+  document.getElementById('sched-day-title').textContent='Treningi — '+formatDayLabel(schedDate);
+  const dayList=data
+    .map((t,idx)=>({t,idx}))
+    .filter(({t})=>isTrainingIncome(t) && txToISO(t)===schedDate)
+    .sort((a,b)=>scheduleClientName(a.t).localeCompare(scheduleClientName(b.t),'pl'));
+
+  document.getElementById('sched-day-list').innerHTML = dayList.length ? dayList.map(({t,idx})=>{
+    const pay = t.src==='cash'
+      ? '<span class="tx-badge" style="background:var(--blue-bg);color:var(--blue)">💵 Gotówka</span>'
+      : '<span class="tx-badge" style="background:var(--green-bg);color:var(--green)">🏦 Przelew</span>';
+    const guest = t.withGuest
+      ? '<span class="tx-badge" style="background:var(--purple-bg);color:var(--purple)">👥 Z osobą</span>'
+      : '<span class="tx-badge" style="background:var(--bg2);color:var(--text3)">👤 Sam</span>';
+    return `<div class="tx-row">
+      <div class="ci" style="background:var(--green-bg)">💪</div>
+      <span class="tx-name">${scheduleClientName(t)}</span>
+      ${guest}${pay}
+      <span class="tx-amt" style="color:var(--green)">+${fmt(t.amt)}</span>
+      <button class="tx-del" onclick="deleteScheduleTx(${idx})" title="Usuń" style="opacity:1">✕</button>
+    </div>`;
+  }).join('') : '<div class="tx-empty">Brak treningów tego dnia. Dodaj wpis powyżej.</div>';
 }
 
 // ═══════════════════════════════════════════════════
