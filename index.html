@@ -1034,6 +1034,7 @@ function selMonth(m){ curMonth=m; renderSidebar(); renderPage(); }
 function deleteMonth(m){
   const n = data.filter(t=>t.month===m).length;
   if(!confirm('Usunąć WSZYSTKIE '+n+' transakcji z miesiąca "'+m+'"?\nTej operacji nie można cofnąć.')) return;
+  data.filter(t=>t.month===m).forEach(reverseIfDebtPayment);
   data = data.filter(t=>t.month!==m);
   save();
   const months=getMonths();
@@ -1109,7 +1110,12 @@ function txHtml(t){
 }
 
 function delTx(idx){
-  if(confirm('Usunąć tę transakcję?')){ data.splice(idx,1); save(); renderSidebar(); renderPage(); }
+  if(!confirm('Usunąć tę transakcję?')) return;
+  reverseIfDebtPayment(data[idx]);
+  data.splice(idx,1);
+  save();
+  renderSidebar();
+  renderPage();
 }
 
 // ═══════════════════════════════════════════════════
@@ -1330,6 +1336,7 @@ function clearMonth(){
   const n = data.filter(t=>t.month===curMonth).length;
   if(!n){ alert('Brak transakcji'); return; }
   if(!confirm(`Usunąć WSZYSTKIE ${n} transakcji z "${curMonth}"?`)) return;
+  data.filter(t=>t.month===curMonth).forEach(reverseIfDebtPayment);
   data = data.filter(t=>t.month!==curMonth);
   save();
   const months=getMonths();
@@ -1974,8 +1981,10 @@ function editDebt(id){
 function saveDebtForm(){
   const name=document.getElementById('debt-name').value.trim();
   const balance=parseFloat(document.getElementById('debt-balance').value)||0;
-  if(!name || balance<=0){ alert('Podaj nazwę i saldo długu.'); return; }
   const editId=document.getElementById('debt-edit-id').value;
+  if(!name){ alert('Podaj nazwę długu.'); return; }
+  if(balance<0){ alert('Saldo nie może być ujemne.'); return; }
+  if(!editId && balance<=0){ alert('Podaj nazwę i saldo długu.'); return; }
   let debts=getDebts();
   const existing = editId ? debts.find(d=>String(d.id)===String(editId)) : null;
   const debt = {
@@ -2043,9 +2052,25 @@ function applyDebtPayment(debt, amount){
   };
 }
 
+function reverseIfDebtPayment(t){
+  if(!t || t.cat!=='Spłata długu' || t.debtId==null) return;
+  const amount=round2(Math.abs(t.amt)||0);
+  if(!(amount>0)) return;
+  const debts=getDebts();
+  const idx=debts.findIndex(d=>String(d.id)===String(t.debtId));
+  if(idx<0) return;
+  const d=debts[idx];
+  d.balance=round2((d.balance||0)+amount);
+  if(typeof d.paid==='number') d.paid=round2(Math.max(0, d.paid-amount));
+  debts[idx]=d;
+  saveDebtsData(debts);
+  if(typeof fbPushDebt==='function') fbPushDebt(d);
+}
+
 function showPayDebt(id){
   const d=getDebts().find(x=>String(x.id)===String(id));
   if(!d) return;
+  if(!(d.balance>0)){ alert('Ten dług jest już spłacony.'); return; }
   closeDebtForm();
   document.getElementById('debt-pay-id').value=d.id;
   document.getElementById('debt-pay-title').textContent='Spłać ratę — '+d.name;
@@ -2090,7 +2115,8 @@ function saveDebtPayment(){
     cat: 'Spłata długu',
     amt: -applied,
     month,
-    src: method==='cash' ? 'cash' : 'bank'
+    src: method==='cash' ? 'cash' : 'bank',
+    debtId: debt.id
   });
   save();
   curMonth=month;
