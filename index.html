@@ -307,6 +307,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
   <div class="card" style="overflow:hidden;margin-bottom:18px">
     <div class="card-p" style="padding-bottom:8px">
+      <div class="sh"><h3>📈 Posiadanie — akcje i bitcoin</h3></div>
+    </div>
+    <div class="mg mg-3" style="padding:0 18px 14px">
+      <div class="mc" style="background:var(--bg2)"><div class="ml">Akcje</div><div class="mv n" id="d-hold-stocks">—</div><div class="ms">wartość w zł</div></div>
+      <div class="mc" style="background:var(--bg2)"><div class="ml">Bitcoin</div><div class="mv n" id="d-hold-btc">—</div><div class="ms">wartość w zł</div></div>
+      <div class="mc" style="background:var(--bg2)"><div class="ml">Razem</div><div class="mv g" id="d-hold-total">—</div><div class="ms">inwestycje łącznie</div></div>
+    </div>
+    <div style="padding:0 18px 18px">
+      <div class="fg-row">
+        <div class="fg"><label>Akcje (zł)</label><input id="hold-stocks" type="number" min="0" step="0.01" placeholder="0"></div>
+        <div class="fg"><label>Bitcoin (zł)</label><input id="hold-btc" type="number" min="0" step="0.01" placeholder="0"></div>
+      </div>
+      <div class="factions" style="margin-top:10px">
+        <button class="btn-p" onclick="saveHoldings()">Zapisz kwoty</button>
+        <span class="fstatus" id="hold-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden;margin-bottom:18px">
+    <div class="card-p" style="padding-bottom:8px">
       <div class="sh"><h3>📊 Wszystkie zobowiązania — jeden widok</h3>
         <button class="btn-s" style="font-size:11px;padding:4px 11px" onclick="goPage('debts')">Szczegóły →</button>
       </div>
@@ -1087,6 +1108,43 @@ function isIncome(t){ return t.amt > 0; }
 function isExpense(t){ return t.amt < 0; }
 function isCash(t){ return t.src === 'cash'; }
 
+function getHoldings(){
+  try {
+    return Object.assign({stocks:0, bitcoin:0}, JSON.parse(localStorage.getItem('budzet_holdings')||'{}'));
+  } catch(e){
+    return {stocks:0, bitcoin:0};
+  }
+}
+function saveHoldingsData(h){ localStorage.setItem('budzet_holdings', JSON.stringify(h)); }
+
+function saveHoldings(){
+  const stocks=Math.max(0, parseFloat(document.getElementById('hold-stocks').value)||0);
+  const bitcoin=Math.max(0, parseFloat(document.getElementById('hold-btc').value)||0);
+  const h={stocks, bitcoin};
+  saveHoldingsData(h);
+  if(typeof fbPushHoldings==='function') fbPushHoldings(h);
+  const st=document.getElementById('hold-status');
+  st.textContent='✓ Zapisano posiadanie';
+  st.className='fstatus';
+  setTimeout(()=>{ if(st.textContent.startsWith('✓')) st.textContent=''; }, 2500);
+  renderHoldings();
+}
+
+function renderHoldings(){
+  const h=getHoldings();
+  const stocks=Number(h.stocks)||0;
+  const bitcoin=Number(h.bitcoin)||0;
+  const stocksEl=document.getElementById('d-hold-stocks');
+  if(!stocksEl) return;
+  stocksEl.textContent=fmt(stocks);
+  document.getElementById('d-hold-btc').textContent=fmt(bitcoin);
+  document.getElementById('d-hold-total').textContent=fmt(stocks+bitcoin);
+  const stocksIn=document.getElementById('hold-stocks');
+  const btcIn=document.getElementById('hold-btc');
+  if(stocksIn && document.activeElement!==stocksIn) stocksIn.value = stocks||'';
+  if(btcIn && document.activeElement!==btcIn) btcIn.value = bitcoin||'';
+}
+
 // ═══════════════════════════════════════════════════
 // SIDEBAR MONTHS
 // ═══════════════════════════════════════════════════
@@ -1222,6 +1280,8 @@ function renderDash(){
   document.getElementById('d-s-train-s').textContent = tx.filter(t=>t.cat==='Plan treningowy'&&isIncome(t)).length+' klientów';
   document.getElementById('d-s-other').textContent = fmt(otherInc);
   document.getElementById('d-s-other-s').textContent = tx.filter(t=>isIncome(t)&&!['Wynagrodzenie','Plan treningowy'].includes(t.cat)).length+' pozycji';
+
+  renderHoldings();
 
   // POPRAWKA: Połączony widok zobowiązań (długi + subskrypcje) — jedno miejsce, poczucie kontroli
   const debts = getDebts();
