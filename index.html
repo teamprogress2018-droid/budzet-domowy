@@ -70,6 +70,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 /* METRICS */
 .mg{display:grid;gap:10px;margin-bottom:18px}
 .mg-4{grid-template-columns:repeat(4,1fr)}
+.mg-5{grid-template-columns:repeat(5,minmax(0,1fr))}
 .mg-3{grid-template-columns:repeat(3,1fr)}
 .mg-2{grid-template-columns:repeat(2,1fr)}
 .mc{padding:14px 18px;border-radius:var(--radius);background:var(--card);border:1px solid var(--border)}
@@ -182,6 +183,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   .sidebar{display:none}
   .page{padding:16px}
   .mg-4{grid-template-columns:1fr 1fr}
+  .mg-5{grid-template-columns:1fr 1fr}
   .g2{grid-template-columns:1fr}
   .frow{grid-template-columns:1fr}
   .src-grid{grid-template-columns:1fr 1fr}
@@ -287,11 +289,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 <div class="page active" id="page-dashboard">
   <div class="ph"><div class="ph-left"><h2 id="d-title">Dashboard</h2><p id="d-sub">Podsumowanie finansów</p></div></div>
 
-  <div class="mg mg-4">
+  <div class="mg mg-5">
     <div class="mc"><div class="ml">Przychody łącznie</div><div class="mv g" id="d-inc">—</div><div class="ms" id="d-inc-s"></div></div>
     <div class="mc"><div class="ml">Wydatki łącznie</div><div class="mv r" id="d-exp">—</div><div class="ms" id="d-exp-s"></div></div>
     <div class="mc"><div class="ml">Bilans</div><div class="mv n" id="d-bal">—</div><div class="ms" id="d-bal-s"></div></div>
     <div class="mc"><div class="ml">Gotówka netto</div><div class="mv b" id="d-cash">—</div><div class="ms">transakcje gotówkowe</div></div>
+    <div class="mc"><div class="ml">Przelew netto</div><div class="mv g" id="d-bank">—</div><div class="ms">przelewy / karta</div></div>
   </div>
 
   <div class="mg mg-3" style="margin-bottom:18px">
@@ -1204,6 +1207,10 @@ function renderDash(){
   document.getElementById('d-bal-s').textContent = balance>=0?'Nadwyżka':'Deficyt';
   const cashNet = cashInc - cashExp;
   document.getElementById('d-cash').textContent = fmt(cashNet,true);
+  const bankNet = (inc - cashInc) - (exp - cashExp);
+  const bankEl = document.getElementById('d-bank');
+  bankEl.textContent = fmt(bankNet,true);
+  bankEl.className = 'mv '+(bankNet>=0?'g':'r');
 
   // Source breakdowns
   const biz = (bySrc['Wynagrodzenie']||0);
