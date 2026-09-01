@@ -80,9 +80,10 @@ async function fbSyncFromCloud(){
   if(!fbCurrentUser) return;
   fbSetStatus('⏳ Synchronizuję...');
   try {
-    const [debtsSnap, impulseSnap] = await Promise.all([
+    const [debtsSnap, impulseSnap, holdingsSnap] = await Promise.all([
       fbDb.collection('debts').where('ownerUid','==',fbCurrentUser.uid).get(),
-      fbDb.collection('impulsePurchases').where('ownerUid','==',fbCurrentUser.uid).get()
+      fbDb.collection('impulsePurchases').where('ownerUid','==',fbCurrentUser.uid).get(),
+      fbDb.collection('holdings').doc(fbCurrentUser.uid).get()
     ]);
 
     if(!debtsSnap.empty){
@@ -98,6 +99,10 @@ async function fbSyncFromCloud(){
         return { ...data, id: parseInt(d.id) };
       });
       saveImpulseData(impulses);
+    }
+    if(holdingsSnap.exists){
+      const hd = holdingsSnap.data()||{};
+      saveHoldingsData({ stocks: Number(hd.stocks)||0, bitcoin: Number(hd.bitcoin)||0 });
     }
 
     // Odśwież widok, jeśli akurat na jednej z tych stron
@@ -135,4 +140,16 @@ async function fbPushImpulse(entry){
 async function fbDeleteImpulse(id){
   if(!fbCurrentUser) return;
   try { await fbDb.collection('impulsePurchases').doc(String(id)).delete(); } catch(e){ console.warn(e.message); }
+}
+async function fbPushHoldings(h){
+  if(!fbCurrentUser) return;
+  try {
+    await fbDb.collection('holdings').doc(fbCurrentUser.uid).set({
+      stocks: Number(h.stocks)||0,
+      bitcoin: Number(h.bitcoin)||0,
+      ownerUid: fbCurrentUser.uid,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    fbSetStatus('✓ Zapisano w chmurze');
+  } catch(e){ console.warn('Firestore (holdings) błąd zapisu:', e.message); fbSetStatus('⚠️ Nie zapisano w chmurze (offline?)', true); }
 }
