@@ -2265,6 +2265,7 @@ function saveDebtForm(){
     notes: document.getElementById('debt-notes').value.trim()
   };
   if(existing && typeof existing.paid === 'number') debt.paid = existing.paid;
+  if(existing && Array.isArray(existing.paymentIds)) debt.paymentIds = existing.paymentIds;
   if(editId){ debts=debts.map(d=>String(d.id)===String(debt.id)?debt:d); } else { debts.push(debt); }
   saveDebtsData(debts);
   if(typeof fbPushDebt==='function') fbPushDebt(debt);
@@ -2327,6 +2328,13 @@ function reverseIfDebtPayment(t){
   const idx=debts.findIndex(d=>String(d.id)===String(t.debtId));
   if(idx<0) return;
   const d=debts[idx];
+  const ids=Array.isArray(d.paymentIds) ? d.paymentIds.map(String) : [];
+  if(t.id!=null){
+    if(!ids.includes(String(t.id))) return;
+    d.paymentIds=d.paymentIds.filter(x=>String(x)!==String(t.id));
+  } else if(ids.length){
+    return;
+  }
   d.balance=round2((d.balance||0)+amount);
   if(typeof d.paid==='number') d.paid=round2(Math.max(0, d.paid-amount));
   debts[idx]=d;
@@ -2370,13 +2378,16 @@ function saveDebtPayment(){
   if(!(debt.balance>0)){ alert('Ten dług jest już spłacony.'); return; }
 
   const applied=round2(Math.min(amount, debt.balance));
+  const txId=Date.now();
   const updated=applyDebtPayment(debt, applied);
+  updated.paymentIds=[...(updated.paymentIds||[]), txId];
   debts[idx]=updated;
   saveDebtsData(debts);
   if(typeof fbPushDebt==='function') fbPushDebt(updated);
 
   const month=isoToMonthLabel(isoDate);
   data.push({
+    id: txId,
     date: isoToTxDate(isoDate),
     name: 'Spłata: '+debt.name,
     cat: 'Spłata długu',
