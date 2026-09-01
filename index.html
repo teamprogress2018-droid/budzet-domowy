@@ -1413,13 +1413,21 @@ function setSchedGuest(v){ schedGuest=!!v; renderSchedule(); }
 function setSchedPay(v){ schedPay=v==='bank'?'bank':'cash'; renderSchedule(); }
 function setSchedPeriod(p){ schedPeriod=p; renderSchedule(); }
 
+function addCalendarMonths(d, n){
+  const day=d.getDate();
+  const next=new Date(d.getFullYear(), d.getMonth()+n, 1);
+  const last=new Date(next.getFullYear(), next.getMonth()+1, 0).getDate();
+  next.setDate(Math.min(day, last));
+  return next;
+}
+
 function shiftSchedDate(dir){
   if(!schedDate) schedDate=toISODate(new Date());
-  const d=parseISODate(schedDate);
+  let d=parseISODate(schedDate);
   if(schedPeriod==='day') d.setDate(d.getDate()+dir);
   else if(schedPeriod==='week') d.setDate(d.getDate()+dir*7);
-  else if(schedPeriod==='month') d.setMonth(d.getMonth()+dir);
-  else d.setFullYear(d.getFullYear()+dir);
+  else if(schedPeriod==='month') d=addCalendarMonths(d, dir);
+  else d=addCalendarMonths(d, dir*12);
   schedDate=toISODate(d);
   const dateEl=document.getElementById('sched-date');
   if(dateEl) dateEl.value=schedDate;
