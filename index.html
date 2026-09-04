@@ -297,9 +297,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="mc"><div class="ml">Przelew netto</div><div class="mv g" id="d-bank">—</div><div class="ms">przelewy / karta</div></div>
   </div>
 
-  <div class="mg mg-3" style="margin-bottom:18px">
-    <div class="mc"><div class="ml">💼 Wynagrodzenie / firma</div><div class="mv g" id="d-s-biz">—</div><div class="ms" id="d-s-biz-s"></div></div>
-    <div class="mc"><div class="ml">💪 Plany treningowe</div><div class="mv g" id="d-s-train">—</div><div class="ms" id="d-s-train-s"></div></div>
+  <div class="mg mg-2" style="margin-bottom:18px">
+    <div class="mc"><div class="ml">💪 Treningi personalne</div><div class="mv g" id="d-s-train">—</div><div class="ms" id="d-s-train-s"></div></div>
     <div class="mc"><div class="ml">🏠 Inne przychody</div><div class="mv g" id="d-s-other">—</div><div class="ms" id="d-s-other-s"></div></div>
   </div>
 
@@ -984,7 +983,7 @@ const CAT_EMOJI = {
 // Źródła przychodu
 const INC_SOURCES = {
   'Wynagrodzenie':        { label:'Wynagrodzenie / Firma', icon:'💼', color:'#15803D' },
-  'Plan treningowy':      { label:'Plany treningowe',       icon:'💪', color:'#059669' },
+  'Plan treningowy':      { label:'Treningi personalne',    icon:'💪', color:'#059669' },
   'Przychód gotówkowy':   { label:'Gotówka (przychód)',     icon:'💵', color:'#2563EB' },
   'Przychód bankowy':     { label:'Przelewy bankowe',       icon:'🏦', color:'#16A34A' },
   'Inne przychody':       { label:'Inne źródła',            icon:'💰', color:'#64748B' },
@@ -1271,15 +1270,12 @@ function renderDash(){
   bankEl.className = 'mv '+(bankNet>=0?'g':'r');
 
   // Source breakdowns
-  const biz = (bySrc['Wynagrodzenie']||0);
   const train = (bySrc['Plan treningowy']||0);
-  const otherInc = inc - biz - train;
-  document.getElementById('d-s-biz').textContent = fmt(biz);
-  document.getElementById('d-s-biz-s').textContent = tx.filter(t=>t.cat==='Wynagrodzenie'&&isIncome(t)).length+' pozycji';
+  const otherInc = inc - train;
   document.getElementById('d-s-train').textContent = fmt(train);
   document.getElementById('d-s-train-s').textContent = tx.filter(t=>t.cat==='Plan treningowy'&&isIncome(t)).length+' klientów';
   document.getElementById('d-s-other').textContent = fmt(otherInc);
-  document.getElementById('d-s-other-s').textContent = tx.filter(t=>isIncome(t)&&!['Wynagrodzenie','Plan treningowy'].includes(t.cat)).length+' pozycji';
+  document.getElementById('d-s-other-s').textContent = tx.filter(t=>isIncome(t)&&t.cat!=='Plan treningowy').length+' pozycji';
 
   renderHoldings();
 
