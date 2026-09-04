@@ -148,6 +148,30 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .src-card .s-val{font-size:18px;font-weight:600;color:var(--green);font-family:'DM Mono',monospace}
 .src-card .s-count{font-size:10px;color:var(--text3);margin-top:3px}
 
+/* WEEK CALENDAR */
+#page-schedule{max-width:1100px}
+.cal-scroll{overflow:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.cal-grid{display:grid;grid-template-columns:46px repeat(7,minmax(108px,1fr));min-width:820px}
+.cal-h,.cal-time,.cal-cell{border-right:1px solid var(--border);border-bottom:1px solid var(--border);box-sizing:border-box}
+.cal-h{padding:8px 6px 6px;text-align:center;background:var(--bg2);position:sticky;top:0;z-index:2;cursor:pointer}
+.cal-h.today{background:var(--red-bg);color:var(--red)}
+.cal-h.sel{box-shadow:inset 0 -3px 0 var(--accent)}
+.cal-h .cal-dayn{font-size:10px;text-transform:uppercase;letter-spacing:.04em;opacity:.75}
+.cal-h .cal-num{font-size:16px;font-weight:600;line-height:1.2}
+.cal-h .cal-earn{font-size:11px;font-weight:600;color:var(--green);margin-top:3px;font-family:'DM Mono',monospace}
+.cal-time{font-size:10px;color:var(--text3);padding:4px 4px 0 0;text-align:right;background:var(--bg2);font-family:'DM Mono',monospace}
+.cal-cell{min-height:48px;cursor:pointer;padding:2px;background:var(--card);vertical-align:top}
+.cal-cell:hover{background:var(--bg2)}
+.cal-cell.sel{background:var(--green-bg)}
+.cal-cell.now{box-shadow:inset 0 2px 0 var(--red)}
+.cal-slot{border-radius:5px;padding:3px 5px;font-size:10.5px;line-height:1.25;margin-bottom:2px;position:relative;overflow:hidden}
+.cal-slot .cs-name{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-slot .cs-amt{font-family:'DM Mono',monospace;font-size:10px;opacity:.9}
+.cal-slot .cs-del{position:absolute;top:1px;right:2px;border:none;background:none;cursor:pointer;font-size:11px;line-height:1;opacity:.45;color:inherit;padding:0 2px}
+.cal-slot .cs-del:hover{opacity:1}
+.cal-empty{height:100%}
+.cal-none{min-height:36px;padding:4px 6px;font-size:11px;color:var(--text3);border-bottom:1px solid var(--border)}
+
 /* SEGMENTED TOGGLE */
 .seg{display:flex;gap:6px;flex-wrap:wrap}
 .seg .btn-s.active{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -230,7 +254,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Przychody
     </button>
     <button class="nav-btn" onclick="goPage('schedule')">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Grafik zarobków
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Grafik pracy
     </button>
     <button class="nav-btn" onclick="goPage('expenses')">
       <svg viewBox="0 0 24 24"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>Wydatki
@@ -387,23 +411,45 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
 <!-- SCHEDULE / GRAFIK ZAROBKÓW -->
 <div class="page" id="page-schedule">
-  <div class="ph"><div class="ph-left"><h2>Grafik zarobków</h2><p>Treningi personalne — każdy klient osobno, podsumowania automatycznie</p></div></div>
+  <div class="ph"><div class="ph-left"><h2>Grafik pracy</h2><p>Kliknij godzinę, wpisz imię i kwotę — sumy liczą się same</p></div>
+    <button class="btn-s" onclick="goSchedToday()" style="flex-shrink:0">Dzisiaj</button>
+  </div>
 
-  <div class="card form-card" style="margin-bottom:16px">
-    <div class="sec-lbl">Nowy trening</div>
+  <div class="mg mg-3" style="margin-bottom:14px">
+    <div class="mc"><div class="ml">Dziś / wybrany dzień</div><div class="mv g" id="sched-sum-day">—</div><div class="ms" id="sched-sum-day-n"></div></div>
+    <div class="mc"><div class="ml">Ten tydzień</div><div class="mv g" id="sched-sum-week">—</div><div class="ms" id="sched-sum-week-n"></div></div>
+    <div class="mc"><div class="ml">Ten miesiąc</div><div class="mv g" id="sched-sum-month">—</div><div class="ms" id="sched-sum-month-n"></div></div>
+  </div>
+
+  <div class="card card-p" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <button class="btn-s" onclick="shiftSchedDate(-1)" title="Poprzedni tydzień" style="padding:8px 12px">‹</button>
+      <div style="text-align:center;flex:1">
+        <div id="sched-range-label" style="font-size:15px;font-weight:600"></div>
+        <div id="sched-range-count" style="font-size:11px;color:var(--text3);margin-top:2px"></div>
+      </div>
+      <button class="btn-s" onclick="shiftSchedDate(1)" title="Następny tydzień" style="padding:8px 12px">›</button>
+    </div>
+  </div>
+
+  <div class="card form-card" style="margin-bottom:14px">
+    <div class="sec-lbl">Wpisz trening</div>
     <div class="frow f3">
       <div class="fg"><label>Data</label><input id="sched-date" type="date" onchange="schedDate=this.value;renderSchedule()"></div>
-      <div class="fg"><label>Imię i nazwisko klienta</label><input id="sched-name" type="text" placeholder="np. Anna Kowalska"></div>
-      <div class="fg"><label>Kwota (zł)</label><input id="sched-amt" type="number" min="0.01" step="0.01" placeholder="0"></div>
+      <div class="fg"><label>Godzina</label>
+        <select id="sched-hour" onchange="schedHour=parseInt(this.value,10)||8;renderSchedule()"></select>
+      </div>
+      <div class="fg"><label>Imię i nazwisko</label><input id="sched-name" type="text" placeholder="np. Arek"></div>
     </div>
-    <div class="frow">
+    <div class="frow f3">
+      <div class="fg"><label>Kwota za trening (zł)</label><input id="sched-amt" type="number" min="0.01" step="0.01" placeholder="0"></div>
       <div class="fg"><label>Towarzystwo</label>
         <div class="seg" id="sched-guest-seg">
           <button type="button" class="btn-s" id="sched-guest-solo" onclick="setSchedGuest(false)" style="flex:1">Sam</button>
-          <button type="button" class="btn-s" id="sched-guest-duo" onclick="setSchedGuest(true)" style="flex:1">Z osobą towarzyszącą</button>
+          <button type="button" class="btn-s" id="sched-guest-duo" onclick="setSchedGuest(true)" style="flex:1">Z osobą</button>
         </div>
       </div>
-      <div class="fg"><label>Forma płatności</label>
+      <div class="fg"><label>Płatność</label>
         <div class="seg" id="sched-pay-seg">
           <button type="button" class="btn-s" id="sched-pay-cash" onclick="setSchedPay('cash')" style="flex:1">💵 Gotówka</button>
           <button type="button" class="btn-s" id="sched-pay-bank" onclick="setSchedPay('bank')" style="flex:1">🏦 Przelew</button>
@@ -416,33 +462,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
   </div>
 
-  <div class="card card-p" style="margin-bottom:16px">
-    <div class="sh" style="margin-bottom:10px"><h3>Okres podsumowania</h3></div>
-    <div class="seg" id="sched-period-seg" style="margin-bottom:12px">
-      <button type="button" class="btn-s" onclick="setSchedPeriod('day')" id="sched-p-day" style="flex:1">Dzień</button>
-      <button type="button" class="btn-s" onclick="setSchedPeriod('week')" id="sched-p-week" style="flex:1">Tydzień</button>
-      <button type="button" class="btn-s" onclick="setSchedPeriod('month')" id="sched-p-month" style="flex:1">Miesiąc</button>
-      <button type="button" class="btn-s" onclick="setSchedPeriod('year')" id="sched-p-year" style="flex:1">Rok</button>
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-      <button class="btn-s" onclick="shiftSchedDate(-1)" title="Poprzedni okres" style="padding:8px 12px">‹</button>
-      <div style="text-align:center;flex:1">
-        <div id="sched-range-label" style="font-size:15px;font-weight:600"></div>
-        <div id="sched-range-count" style="font-size:11px;color:var(--text3);margin-top:2px"></div>
-      </div>
-      <button class="btn-s" onclick="shiftSchedDate(1)" title="Następny okres" style="padding:8px 12px">›</button>
-    </div>
-  </div>
-
-  <div class="mg mg-3" style="margin-bottom:18px">
-    <div class="mc"><div class="ml">Łącznie</div><div class="mv g" id="sched-sum-total">—</div><div class="ms" id="sched-sum-n"></div></div>
-    <div class="mc"><div class="ml">Gotówka</div><div class="mv b" id="sched-sum-cash">—</div><div class="ms">wpłaty gotówkowe</div></div>
-    <div class="mc"><div class="ml">Przelew</div><div class="mv g" id="sched-sum-bank">—</div><div class="ms">wpłaty przelewem</div></div>
-  </div>
-
-  <div class="card" style="overflow:hidden">
-    <div class="card-p" style="padding-bottom:4px"><div class="sh"><h3 id="sched-day-title">Treningi tego dnia</h3></div></div>
-    <div id="sched-day-list"></div>
+  <div class="cal-scroll" style="margin-bottom:16px">
+    <div class="cal-none" id="sched-untimed" style="display:none"></div>
+    <div class="cal-grid" id="sched-cal"></div>
   </div>
 </div>
 
@@ -1400,7 +1422,7 @@ function renderIncome(){
 const DAYS_PL = ['niedziela','poniedziałek','wtorek','środa','czwartek','piątek','sobota'];
 const MONTHS_PL_GEN = ['stycznia','lutego','marca','kwietnia','maja','czerwca','lipca','sierpnia','września','października','listopada','grudnia'];
 let schedDate = null;
-let schedPeriod = 'day';
+let schedHour = 8;
 let schedGuest = false;
 let schedPay = 'cash';
 
@@ -1476,28 +1498,91 @@ function schedRange(iso, period){
   return {from:toISODate(start), to:toISODate(end), label: String(d.getFullYear())};
 }
 
+const SCHED_HOURS = [8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
+const SLOT_COLORS = [
+  {bg:'#dbeafe',fg:'#1e3a8a'},
+  {bg:'#dcfce7',fg:'#166534'},
+  {bg:'#fef3c7',fg:'#92400e'},
+  {bg:'#fee2e2',fg:'#991b1b'},
+  {bg:'#ede9fe',fg:'#5b21b6'},
+  {bg:'#e0f2fe',fg:'#075985'}
+];
+function clientColor(name){
+  let h=0; const s=String(name||'');
+  for(let i=0;i<s.length;i++) h=((h<<5)-h)+s.charCodeAt(i)|0;
+  return SLOT_COLORS[Math.abs(h)%SLOT_COLORS.length];
+}
+function hourLabel(h){ return String(h).padStart(2,'0')+':00'; }
+function txHour(t){
+  if(!t || !t.time) return null;
+  const h=parseInt(String(t.time).split(':')[0],10);
+  return (h>=0 && h<=23) ? h : null;
+}
+function isoWeekNum(d){
+  const t=new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day=t.getUTCDay()||7;
+  t.setUTCDate(t.getUTCDate()+4-day);
+  const y0=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil((((t-y0)/86400000)+1)/7);
+}
+function fillSchedHourSelect(){
+  const sel=document.getElementById('sched-hour');
+  if(!sel || sel.options.length) return;
+  sel.innerHTML = SCHED_HOURS.map(h=>`<option value="${hourLabel(h)}">${hourLabel(h)}</option>`).join('');
+}
+function trainingsInRange(from,to){
+  return data.filter(t=>{
+    if(!isTrainingIncome(t)) return false;
+    const iso=txToISO(t);
+    return iso && iso>=from && iso<=to;
+  });
+}
+function sumTrainings(list){ return list.reduce((s,t)=>s+(t.amt||0),0); }
+
 function setSchedGuest(v){ schedGuest=!!v; renderSchedule(); }
 function setSchedPay(v){ schedPay=v==='bank'?'bank':'cash'; renderSchedule(); }
-function setSchedPeriod(p){ schedPeriod=p; renderSchedule(); }
 
-function addCalendarMonths(d, n){
-  const day=d.getDate();
-  const next=new Date(d.getFullYear(), d.getMonth()+n, 1);
-  const last=new Date(next.getFullYear(), next.getMonth()+1, 0).getDate();
-  next.setDate(Math.min(day, last));
-  return next;
+function syncSchedForm(){
+  const dateEl=document.getElementById('sched-date');
+  if(dateEl) dateEl.value=schedDate;
+  const hourEl=document.getElementById('sched-hour');
+  if(hourEl) hourEl.value=hourLabel(schedHour);
+}
+
+function goSchedToday(){
+  const now=new Date();
+  schedDate=toISODate(now);
+  const nowH=now.getHours();
+  schedHour=SCHED_HOURS.includes(nowH)?nowH:8;
+  fillSchedHourSelect();
+  syncSchedForm();
+  renderSchedule();
+}
+
+function selectSchedDay(iso){
+  schedDate=iso;
+  syncSchedForm();
+  renderSchedule();
+}
+
+function openSchedSlot(iso, hour){
+  schedDate=iso;
+  schedHour=hour;
+  fillSchedHourSelect();
+  syncSchedForm();
+  renderSchedule();
+  const nameEl=document.getElementById('sched-name');
+  if(nameEl) nameEl.focus();
+  const form=document.querySelector('#page-schedule .form-card');
+  if(form) form.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 function shiftSchedDate(dir){
   if(!schedDate) schedDate=toISODate(new Date());
-  let d=parseISODate(schedDate);
-  if(schedPeriod==='day') d.setDate(d.getDate()+dir);
-  else if(schedPeriod==='week') d.setDate(d.getDate()+dir*7);
-  else if(schedPeriod==='month') d=addCalendarMonths(d, dir);
-  else d=addCalendarMonths(d, dir*12);
+  const d=parseISODate(schedDate);
+  d.setDate(d.getDate()+dir*7);
   schedDate=toISODate(d);
-  const dateEl=document.getElementById('sched-date');
-  if(dateEl) dateEl.value=schedDate;
+  syncSchedForm();
   renderSchedule();
 }
 
@@ -1505,18 +1590,21 @@ function addScheduleEntry(){
   const dateEl=document.getElementById('sched-date');
   const nameEl=document.getElementById('sched-name');
   const amtEl=document.getElementById('sched-amt');
+  const hourEl=document.getElementById('sched-hour');
   const statusEl=document.getElementById('sched-status');
   const iso=dateEl.value || toISODate(new Date());
   const client=nameEl.value.trim();
   const amt=parseFloat(String(amtEl.value).replace(',','.'));
-  if(!client){ statusEl.textContent='Podaj imię i nazwisko klienta.'; statusEl.className='fstatus err'; return; }
-  if(!(amt>0)){ statusEl.textContent='Podaj kwotę większą od zera.'; statusEl.className='fstatus err'; return; }
+  const time=hourEl && hourEl.value ? hourEl.value : '08:00';
+  if(!client){ statusEl.textContent='Podaj imię i nazwisko.'; statusEl.className='fstatus err'; return; }
+  if(!(amt>0)){ statusEl.textContent='Podaj kwotę za trening.'; statusEl.className='fstatus err'; return; }
 
   const month=isoToMonthLabel(iso);
   data.push({
     id: Date.now(),
     date: isoToTxDate(iso),
     iso,
+    time,
     name: 'Plan treningowy — '+client,
     cat: 'Plan treningowy',
     amt,
@@ -1529,7 +1617,7 @@ function addScheduleEntry(){
   schedDate=iso;
   nameEl.value='';
   amtEl.value='';
-  statusEl.textContent='✓ Dodano trening: '+client;
+  statusEl.textContent='✓ Dodano: '+time+' '+client+' · '+fmt(amt);
   statusEl.className='fstatus';
   setTimeout(()=>{ if(statusEl.textContent.startsWith('✓')) statusEl.textContent=''; }, 3000);
   renderSidebar();
@@ -1546,56 +1634,101 @@ function deleteScheduleTx(idx){
 
 function renderSchedule(){
   if(!schedDate) schedDate=toISODate(new Date());
+  fillSchedHourSelect();
   const dateEl=document.getElementById('sched-date');
   if(dateEl && !dateEl.value) dateEl.value=schedDate;
 
-  document.getElementById('sched-guest-solo').classList.toggle('active', !schedGuest);
-  document.getElementById('sched-guest-duo').classList.toggle('active', !!schedGuest);
-  document.getElementById('sched-pay-cash').classList.toggle('active', schedPay==='cash');
-  document.getElementById('sched-pay-bank').classList.toggle('active', schedPay==='bank');
-  ['day','week','month','year'].forEach(p=>{
-    const el=document.getElementById('sched-p-'+p);
-    if(el) el.classList.toggle('active', schedPeriod===p);
-  });
+  const guestSolo=document.getElementById('sched-guest-solo');
+  if(guestSolo){
+    guestSolo.classList.toggle('active', !schedGuest);
+    document.getElementById('sched-guest-duo').classList.toggle('active', !!schedGuest);
+    document.getElementById('sched-pay-cash').classList.toggle('active', schedPay==='cash');
+    document.getElementById('sched-pay-bank').classList.toggle('active', schedPay==='bank');
+  }
 
-  const range=schedRange(schedDate, schedPeriod);
-  document.getElementById('sched-range-label').textContent=range.label;
+  const dayR=schedRange(schedDate,'day');
+  const weekR=schedRange(schedDate,'week');
+  const monthR=schedRange(schedDate,'month');
+  const dayList=trainingsInRange(dayR.from, dayR.to);
+  const weekList=trainingsInRange(weekR.from, weekR.to);
+  const monthList=trainingsInRange(monthR.from, monthR.to);
 
-  const inRange=data.filter(t=>{
-    if(!isTrainingIncome(t)) return false;
+  document.getElementById('sched-sum-day').textContent=fmt(sumTrainings(dayList));
+  document.getElementById('sched-sum-day-n').textContent=treningLabel(dayList.length)+' · '+formatDayLabel(schedDate);
+  document.getElementById('sched-sum-week').textContent=fmt(sumTrainings(weekList));
+  document.getElementById('sched-sum-week-n').textContent=treningLabel(weekList.length)+' · '+weekR.label;
+  document.getElementById('sched-sum-month').textContent=fmt(sumTrainings(monthList));
+  document.getElementById('sched-sum-month-n').textContent=treningLabel(monthList.length)+' · '+monthR.label;
+
+  const weekStart=startOfISOWeek(parseISODate(schedDate));
+  const weekDays=[];
+  for(let i=0;i<7;i++){
+    const d=new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate()+i);
+    weekDays.push(toISODate(d));
+  }
+  const today=toISODate(new Date());
+  const end=parseISODate(weekDays[6]);
+  const m1=MONTHS_PL[weekStart.getMonth()];
+  const m2=MONTHS_PL[end.getMonth()];
+  const y1=weekStart.getFullYear();
+  const y2=end.getFullYear();
+  const monthTitle=(m1===m2 && y1===y2) ? m1+' '+y1 : (y1===y2 ? m1+' / '+m2+' '+y1 : m1+' '+y1+' / '+m2+' '+y2);
+  document.getElementById('sched-range-label').textContent =
+    monthTitle+' · tydzień '+isoWeekNum(weekStart);
+  document.getElementById('sched-range-count').textContent =
+    formatShortDate(weekStart)+' – '+formatShortDate(end)+
+    (weekList.length ? ' · '+treningLabel(weekList.length) : ' · kliknij godzinę, żeby dodać trening');
+  const nowH=new Date().getHours();
+
+  const byDayHour={};
+  const untimed=[];
+  weekList.forEach(t=>{
     const iso=txToISO(t);
-    return iso && iso>=range.from && iso<=range.to;
+    const h=txHour(t);
+    if(h==null){ untimed.push(t); return; }
+    const key=iso+'|'+h;
+    (byDayHour[key]||(byDayHour[key]=[])).push(t);
   });
-  const total=inRange.reduce((s,t)=>s+t.amt,0);
-  const cash=inRange.filter(t=>t.src==='cash').reduce((s,t)=>s+t.amt,0);
-  const bank=total-cash;
-  document.getElementById('sched-sum-total').textContent=fmt(total);
-  document.getElementById('sched-sum-cash').textContent=fmt(cash);
-  document.getElementById('sched-sum-bank').textContent=fmt(bank);
-  document.getElementById('sched-sum-n').textContent=treningLabel(inRange.length);
-  document.getElementById('sched-range-count').textContent=inRange.length ? treningLabel(inRange.length)+' w okresie' : 'brak treningów w tym okresie';
 
-  document.getElementById('sched-day-title').textContent='Treningi — '+formatDayLabel(schedDate);
-  const dayList=data
-    .map((t,idx)=>({t,idx}))
-    .filter(({t})=>isTrainingIncome(t) && txToISO(t)===schedDate)
-    .sort((a,b)=>scheduleClientName(a.t).localeCompare(scheduleClientName(b.t),'pl'));
+  const untimedEl=document.getElementById('sched-untimed');
+  if(untimed.length){
+    untimedEl.style.display='block';
+    untimedEl.innerHTML = 'Bez godziny: '+untimed.map(t=>{
+      const idx=data.indexOf(t);
+      return `${scheduleClientName(t)} ${fmt(t.amt)} <button class="tx-del" style="opacity:1;display:inline" onclick="deleteScheduleTx(${idx})" title="Usuń">✕</button>`;
+    }).join(' · ');
+  } else { untimedEl.style.display='none'; untimedEl.innerHTML=''; }
 
-  document.getElementById('sched-day-list').innerHTML = dayList.length ? dayList.map(({t,idx})=>{
-    const pay = t.src==='cash'
-      ? '<span class="tx-badge" style="background:var(--blue-bg);color:var(--blue)">💵 Gotówka</span>'
-      : '<span class="tx-badge" style="background:var(--green-bg);color:var(--green)">🏦 Przelew</span>';
-    const guest = t.withGuest
-      ? '<span class="tx-badge" style="background:var(--purple-bg);color:var(--purple)">👥 Z osobą</span>'
-      : '<span class="tx-badge" style="background:var(--bg2);color:var(--text3)">👤 Sam</span>';
-    return `<div class="tx-row">
-      <div class="ci" style="background:var(--green-bg)">💪</div>
-      <span class="tx-name">${scheduleClientName(t)}</span>
-      ${guest}${pay}
-      <span class="tx-amt" style="color:var(--green)">+${fmt(t.amt)}</span>
-      <button class="tx-del" onclick="deleteScheduleTx(${idx})" title="Usuń" style="opacity:1">✕</button>
+  const DAY_SHORT=['pn','wt','śr','cz','pt','so','nd'];
+  let html='<div class="cal-h"></div>';
+  weekDays.forEach((iso,i)=>{
+    const d=parseISODate(iso);
+    const dayEarn=sumTrainings(trainingsInRange(iso,iso));
+    html+=`<div class="cal-h${iso===today?' today':''}${iso===schedDate?' sel':''}" onclick="selectSchedDay('${iso}')">
+      <div class="cal-dayn">${DAY_SHORT[i]}</div>
+      <div class="cal-num">${d.getDate()}</div>
+      <div class="cal-earn">${dayEarn?fmt(dayEarn):'—'}</div>
     </div>`;
-  }).join('') : '<div class="tx-empty">Brak treningów tego dnia. Dodaj wpis powyżej.</div>';
+  });
+  SCHED_HOURS.forEach(h=>{
+    html+=`<div class="cal-time">${hourLabel(h)}</div>`;
+    weekDays.forEach(iso=>{
+      const items=byDayHour[iso+'|'+h]||[];
+      const slots=items.map(t=>{
+        const idx=data.indexOf(t);
+        const col=clientColor(scheduleClientName(t));
+        const nm=scheduleClientName(t);
+        return `<div class="cal-slot" style="background:${col.bg};color:${col.fg}">
+          <button class="cs-del" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
+          <span class="cs-name">${hourLabel(h)} ${nm}</span>
+          <span class="cs-amt">${fmt(t.amt)}</span>
+        </div>`;
+      }).join('');
+      const cls='cal-cell'+(iso===schedDate && h===schedHour?' sel':'')+(iso===today && h===nowH?' now':'');
+      html+=`<div class="${cls}" onclick="openSchedSlot('${iso}',${h})" title="Dodaj trening">${slots||'<div class="cal-empty"></div>'}</div>`;
+    });
+  });
+  document.getElementById('sched-cal').innerHTML=html;
 }
 
 // ═══════════════════════════════════════════════════
