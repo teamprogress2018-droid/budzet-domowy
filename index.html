@@ -150,16 +150,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
 /* WEEK CALENDAR */
 #page-schedule{max-width:1100px}
-.cal-scroll{overflow:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.cal-scroll{overflow:auto;max-height:min(68vh,780px);border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .cal-grid{display:grid;grid-template-columns:46px repeat(7,minmax(108px,1fr));min-width:820px}
 .cal-h,.cal-time,.cal-cell{border-right:1px solid var(--border);border-bottom:1px solid var(--border);box-sizing:border-box}
-.cal-h{padding:8px 6px 6px;text-align:center;background:var(--bg2);position:sticky;top:0;z-index:2;cursor:pointer}
+.cal-h{padding:8px 6px 6px;text-align:center;background:var(--bg2);position:sticky;top:0;z-index:3;cursor:pointer}
 .cal-h.today{background:var(--red-bg);color:var(--red)}
 .cal-h.sel{box-shadow:inset 0 -3px 0 var(--accent)}
 .cal-h .cal-dayn{font-size:10px;text-transform:uppercase;letter-spacing:.04em;opacity:.75}
 .cal-h .cal-num{font-size:16px;font-weight:600;line-height:1.2}
 .cal-h .cal-earn{font-size:11px;font-weight:600;color:var(--green);margin-top:3px;font-family:'DM Mono',monospace}
-.cal-time{font-size:10px;color:var(--text3);padding:4px 4px 0 0;text-align:right;background:var(--bg2);font-family:'DM Mono',monospace}
+.cal-time{font-size:10px;color:var(--text3);padding:4px 4px 0 0;text-align:right;background:var(--bg2);font-family:'DM Mono',monospace;position:sticky;left:0;z-index:2}
+.cal-grid>.cal-h:first-child{left:0;z-index:4;cursor:default}
 .cal-cell{min-height:48px;cursor:pointer;padding:2px;background:var(--card);vertical-align:top}
 .cal-cell:hover{background:var(--bg2)}
 .cal-cell.sel{background:var(--green-bg)}
@@ -461,8 +462,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
   </div>
 
+  <div class="cal-none" id="sched-untimed" style="display:none;margin-bottom:8px;border:1px solid var(--border);border-radius:var(--rsm);background:var(--card)"></div>
   <div class="cal-scroll" style="margin-bottom:16px">
-    <div class="cal-none" id="sched-untimed" style="display:none"></div>
     <div class="cal-grid" id="sched-cal"></div>
   </div>
 </div>
