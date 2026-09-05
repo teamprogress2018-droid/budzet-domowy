@@ -1769,6 +1769,16 @@ function schedPointerMove(ev){
   ev.preventDefault();
   schedDrag.ghost.style.left=ev.clientX+'px';
   schedDrag.ghost.style.top=ev.clientY+'px';
+  const sc=document.querySelector('#page-schedule .cal-scroll');
+  if(sc){
+    const r=sc.getBoundingClientRect();
+    if(ev.clientY<r.top+36) sc.scrollTop-=24;
+    else if(ev.clientY>r.bottom-36) sc.scrollTop+=24;
+    if(ev.clientX<r.left+36) sc.scrollLeft-=24;
+    else if(ev.clientX>r.right-36) sc.scrollLeft+=24;
+  }
+  if(ev.clientY>window.innerHeight-40) window.scrollBy(0,28);
+  else if(ev.clientY<40) window.scrollBy(0,-28);
   document.querySelectorAll('#sched-cal .cal-cell.drop').forEach(el=>el.classList.remove('drop'));
   const under=document.elementFromPoint(ev.clientX, ev.clientY);
   const cell=under && under.closest('#sched-cal .cal-cell');
