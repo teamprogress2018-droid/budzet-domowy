@@ -167,6 +167,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .cal-cell.now{box-shadow:inset 0 2px 0 var(--red)}
 .cal-cell.drop{background:var(--green-bg);outline:2px dashed var(--accent);outline-offset:-2px}
 .cal-slot{border-radius:5px;padding:3px 16px 3px 5px;font-size:10.5px;line-height:1.25;margin-bottom:2px;position:relative;overflow:hidden;cursor:grab;user-select:none}
+.cal-slot.editing{outline:2px solid var(--accent);outline-offset:1px}
 .cal-slot .cs-name{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-slot .cs-amt{font-family:'DM Mono',monospace;font-size:10px;opacity:.9}
 .cal-slot .cs-del{position:absolute;top:1px;right:2px;border:none;background:none;cursor:pointer;font-size:11px;line-height:1;opacity:.45;color:inherit;padding:0 2px}
@@ -174,6 +175,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .cal-empty{height:100%}
 .cal-none{min-height:36px;padding:4px 6px;font-size:11px;color:var(--text3);border-bottom:1px solid var(--border)}
 .cal-chip{display:inline-block;padding:2px 8px;margin:2px 4px 2px 0;border-radius:999px;background:var(--bg2);cursor:grab;user-select:none}
+.cal-chip.editing,.cal-slot.editing{outline:2px solid var(--accent);outline-offset:1px}
 .cal-drag-ghost{position:fixed;z-index:9999;pointer-events:none;transform:translate(-50%,-120%);background:var(--accent);color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:600;box-shadow:var(--shadow);white-space:nowrap}
 body.sched-dragging,body.sched-dragging *{cursor:grabbing !important}
 
@@ -470,7 +472,8 @@ body.sched-dragging,body.sched-dragging *{cursor:grabbing !important}
       <div class="fg"><label>Przelew (druga osoba)</label><input id="sched-amt-bank" type="number" min="0.01" step="0.01" placeholder="0" oninput="onSchedSplitEdit('bank')"></div>
     </div>
     <div class="factions">
-      <button class="btn-p" onclick="addScheduleEntry()">Dodaj trening</button>
+      <button class="btn-p" id="sched-save-btn" onclick="addScheduleEntry()">Dodaj trening</button>
+      <button class="btn-s" id="sched-cancel-edit" onclick="cancelSchedEdit()" style="display:none">Anuluj</button>
       <span class="fstatus" id="sched-status"></span>
     </div>
   </div>
@@ -1442,6 +1445,7 @@ let schedDate = null;
 let schedHour = 6;
 let schedGuest = false;
 let schedPay = 'cash';
+let schedEditIdx = null;
 
 function toISODate(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -1642,6 +1646,7 @@ function selectSchedDay(iso){
 
 function openSchedSlot(iso, hour){
   if(schedSuppressClick) return;
+  cancelSchedEdit(true);
   schedDate=iso;
   schedHour=hour;
   fillSchedHourSelect();
@@ -1698,8 +1703,8 @@ function cloneScheduleTx(t, iso, time){
   }
   return c;
 }
-function hasTrainingAt(iso, time, client){
-  return data.some(t=>isTrainingIncome(t) && txToISO(t)===iso && (t.time||'')===time && scheduleClientName(t)===client);
+function hasTrainingAt(iso, time, client, exceptIdx){
+  return data.some((t,i)=>i!==exceptIdx && isTrainingIncome(t) && txToISO(t)===iso && (t.time||'')===time && scheduleClientName(t)===client);
 }
 function timedWeekTrainings(){
   if(!schedDate) schedDate=toISODate(new Date());
@@ -1715,7 +1720,7 @@ function dropScheduleOnCell(idx, iso, hour){
   const srcIso=txToISO(t);
   const srcH=txHour(t);
   if(srcIso===iso && srcH===hour) return;
-  if(hasTrainingAt(iso, time, client)){
+  if(hasTrainingAt(iso, time, client, srcH==null?idx:undefined)){
     setSchedStatus('Ten trening już jest w '+time+' · '+formatDayLabel(iso)+'.', true);
     return;
   }
@@ -1881,6 +1886,60 @@ function bindSchedPointer(){
   document.addEventListener('pointercancel', schedPointerUp);
 }
 
+function cancelSchedEdit(skipRender){
+  if(schedEditIdx==null) return;
+  schedEditIdx=null;
+  const nameEl=document.getElementById('sched-name');
+  const amtEl=document.getElementById('sched-amt');
+  if(nameEl) nameEl.value='';
+  if(amtEl) amtEl.value='';
+  const cashEl=document.getElementById('sched-amt-cash');
+  const bankEl=document.getElementById('sched-amt-bank');
+  if(cashEl) cashEl.value='';
+  if(bankEl) bankEl.value='';
+  updateSchedFormMode();
+  if(!skipRender) renderSchedule();
+}
+
+function updateSchedFormMode(){
+  const btn=document.getElementById('sched-save-btn');
+  const cancel=document.getElementById('sched-cancel-edit');
+  const lbl=document.querySelector('#page-schedule .form-card .sec-lbl');
+  const editing=schedEditIdx!=null;
+  if(btn) btn.textContent=editing?'Zapisz zmiany':'Dodaj trening';
+  if(cancel) cancel.style.display=editing?'':'none';
+  if(lbl) lbl.textContent=editing?'Edytuj trening':'Wpisz trening';
+}
+
+function editScheduleTx(idx){
+  if(schedSuppressClick) return;
+  const t=data[idx];
+  if(!t || !isTrainingIncome(t)) return;
+  schedEditIdx=idx;
+  const iso=txToISO(t);
+  if(iso) schedDate=iso;
+  const h=txHour(t);
+  if(h!=null && SCHED_HOURS.includes(h)) schedHour=h;
+  schedGuest=!!t.withGuest || t.src==='split';
+  schedPay=t.src==='split'?'split':(t.src==='bank'?'bank':'cash');
+  renderSchedule();
+  syncSchedForm();
+  const nameEl=document.getElementById('sched-name');
+  const amtEl=document.getElementById('sched-amt');
+  if(nameEl) nameEl.value=scheduleClientName(t);
+  if(amtEl) amtEl.value=t.amt;
+  const cashEl=document.getElementById('sched-amt-cash');
+  const bankEl=document.getElementById('sched-amt-bank');
+  if(t.src==='split' && cashEl && bankEl){
+    cashEl.value=t.cashAmt!=null?t.cashAmt:'';
+    bankEl.value=t.bankAmt!=null?t.bankAmt:'';
+  }
+  updateSchedFormMode();
+  const form=document.querySelector('#page-schedule .form-card');
+  if(form) form.scrollIntoView({behavior:'smooth', block:'nearest'});
+  if(amtEl){ amtEl.focus(); amtEl.select(); }
+}
+
 function addScheduleEntry(){
   const dateEl=document.getElementById('sched-date');
   const nameEl=document.getElementById('sched-name');
@@ -1917,23 +1976,38 @@ function addScheduleEntry(){
   }
 
   const month=rec.month;
-  data.push(rec);
+  const editing=schedEditIdx!=null && data[schedEditIdx] && isTrainingIncome(data[schedEditIdx]);
+  if(editing && hasTrainingAt(iso, rec.time, client, schedEditIdx)){
+    setSchedStatus('Ten trening już jest w '+rec.time+' · '+formatDayLabel(iso)+'.', true); return;
+  }
+  if(editing){
+    rec.id=data[schedEditIdx].id || rec.id;
+    data[schedEditIdx]=rec;
+  } else {
+    data.push(rec);
+  }
   save();
   curMonth=month;
   schedDate=iso;
+  const wasEdit=editing;
+  schedEditIdx=null;
   nameEl.value='';
   amtEl.value='';
   const cashEl=document.getElementById('sched-amt-cash');
   const bankEl=document.getElementById('sched-amt-bank');
   if(cashEl) cashEl.value='';
   if(bankEl) bankEl.value='';
-  setSchedStatus('✓ Dodano: '+time+' '+client+' · '+fmt(rec.amt)+(rec.src==='split'?' · 💵'+fmt(rec.cashAmt)+' + 🏦'+fmt(rec.bankAmt):''));
+  setSchedStatus((wasEdit?'✓ Zmieniono: ':'✓ Dodano: ')+time+' '+client+' · '+fmt(rec.amt)+(rec.src==='split'?' · 💵'+fmt(rec.cashAmt)+' + 🏦'+fmt(rec.bankAmt):''));
   renderSidebar();
   renderSchedule();
 }
 
 function deleteScheduleTx(idx){
   if(!confirm('Usunąć ten trening z grafiku i z transakcji?')) return;
+  if(schedEditIdx!=null){
+    if(idx===schedEditIdx) schedEditIdx=null;
+    else if(idx<schedEditIdx) schedEditIdx--;
+  }
   data.splice(idx,1);
   save();
   renderSidebar();
@@ -1961,6 +2035,7 @@ function renderSchedule(){
   }
   const splitRow=document.getElementById('sched-split-row');
   if(splitRow) splitRow.style.display=schedPay==='split'?'':'none';
+  updateSchedFormMode();
 
   const dayR=schedRange(schedDate,'day');
   const weekR=schedRange(schedDate,'week');
@@ -2011,7 +2086,7 @@ function renderSchedule(){
     untimedEl.style.display='block';
     untimedEl.innerHTML = 'Bez godziny — przeciągnij na kratkę: '+untimed.map(t=>{
       const idx=data.indexOf(t);
-      return `<span class="cal-chip" onpointerdown="schedPointerDown(event,${idx})">${scheduleClientName(t)} ${fmt(t.amt)} <button class="tx-del" style="opacity:1;display:inline" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button></span>`;
+      return `<span class="cal-chip${idx===schedEditIdx?' editing':''}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})">${scheduleClientName(t)} ${fmt(t.amt)} <button class="tx-del" style="opacity:1;display:inline" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button></span>`;
     }).join(' ');
   } else { untimedEl.style.display='none'; untimedEl.innerHTML=''; }
 
@@ -2034,7 +2109,7 @@ function renderSchedule(){
         const idx=data.indexOf(t);
         const col=clientColor(scheduleClientName(t));
         const nm=scheduleClientName(t);
-        return `<div class="cal-slot" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" title="Przeciągnij, żeby skopiować">
+        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="Kliknij, żeby edytować · przeciągnij, żeby skopiować">
           <button class="cs-del" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
           <span class="cs-name">${hourLabel(h)} ${nm}</span>
           <span class="cs-amt">${fmt(t.amt)} · ${schedPayHint(t)}</span>
