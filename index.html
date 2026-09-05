@@ -165,13 +165,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .cal-cell:hover{background:var(--bg2)}
 .cal-cell.sel{background:var(--green-bg)}
 .cal-cell.now{box-shadow:inset 0 2px 0 var(--red)}
-.cal-slot{border-radius:5px;padding:3px 5px;font-size:10.5px;line-height:1.25;margin-bottom:2px;position:relative;overflow:hidden}
+.cal-cell.drop{background:var(--green-bg);outline:2px dashed var(--accent);outline-offset:-2px}
+.cal-slot{border-radius:5px;padding:3px 16px 3px 5px;font-size:10.5px;line-height:1.25;margin-bottom:2px;position:relative;overflow:hidden;cursor:grab;user-select:none}
 .cal-slot .cs-name{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-slot .cs-amt{font-family:'DM Mono',monospace;font-size:10px;opacity:.9}
 .cal-slot .cs-del{position:absolute;top:1px;right:2px;border:none;background:none;cursor:pointer;font-size:11px;line-height:1;opacity:.45;color:inherit;padding:0 2px}
 .cal-slot .cs-del:hover{opacity:1}
 .cal-empty{height:100%}
 .cal-none{min-height:36px;padding:4px 6px;font-size:11px;color:var(--text3);border-bottom:1px solid var(--border)}
+.cal-chip{display:inline-block;padding:2px 8px;margin:2px 4px 2px 0;border-radius:999px;background:var(--bg2);cursor:grab;user-select:none}
+.cal-drag-ghost{position:fixed;z-index:9999;pointer-events:none;transform:translate(-50%,-120%);background:var(--accent);color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:600;box-shadow:var(--shadow);white-space:nowrap}
+body.sched-dragging,body.sched-dragging *{cursor:grabbing !important}
 
 /* SEGMENTED TOGGLE */
 .seg{display:flex;gap:6px;flex-wrap:wrap}
@@ -411,7 +415,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
 <!-- SCHEDULE / GRAFIK ZAROBKÓW -->
 <div class="page" id="page-schedule">
-  <div class="ph"><div class="ph-left"><h2>Grafik pracy</h2><p>Kliknij godzinę, wpisz imię i kwotę — sumy liczą się same</p></div>
+  <div class="ph"><div class="ph-left"><h2>Grafik pracy</h2><p>Przeciągnij osobę na inny dzień — skopiuje się z kwotą. Możesz też skopiować cały tydzień</p></div>
     <button class="btn-s" onclick="goSchedToday()" style="flex-shrink:0">Dzisiaj</button>
   </div>
 
@@ -429,6 +433,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <div id="sched-range-count" style="font-size:11px;color:var(--text3);margin-top:2px"></div>
       </div>
       <button class="btn-s" onclick="shiftSchedDate(1)" title="Następny tydzień" style="padding:8px 12px">›</button>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px">
+      <button class="btn-s" onclick="copySchedNextWeek()">Kopiuj na następny tydzień</button>
+      <button class="btn-s" onclick="copySchedToMonthEnd()">Kopiuj do końca miesiąca</button>
     </div>
   </div>
 
@@ -1564,6 +1572,7 @@ function selectSchedDay(iso){
 }
 
 function openSchedSlot(iso, hour){
+  if(schedSuppressClick) return;
   schedDate=iso;
   schedHour=hour;
   fillSchedHourSelect();
@@ -1584,18 +1593,221 @@ function shiftSchedDate(dir){
   renderSchedule();
 }
 
+function setSchedStatus(msg, isErr){
+  const statusEl=document.getElementById('sched-status');
+  if(!statusEl) return;
+  statusEl.textContent=msg||'';
+  statusEl.className=isErr?'fstatus err':'fstatus';
+  if(msg && msg.startsWith('✓')) setTimeout(()=>{ if(statusEl.textContent===msg) statusEl.textContent=''; }, 4000);
+}
+
+function addDaysISO(iso, days){
+  const d=parseISODate(iso);
+  d.setDate(d.getDate()+days);
+  return toISODate(d);
+}
+function newSchedTxId(){
+  newSchedTxId.n=(newSchedTxId.n||0)+1;
+  return Date.now()*1000 + newSchedTxId.n;
+}
+function cloneScheduleTx(t, iso, time){
+  return {
+    id: newSchedTxId(),
+    date: isoToTxDate(iso),
+    iso,
+    time,
+    name: t.name,
+    cat: 'Plan treningowy',
+    amt: t.amt,
+    month: isoToMonthLabel(iso),
+    src: t.src||'cash',
+    withGuest: !!t.withGuest
+  };
+}
+function hasTrainingAt(iso, time, client){
+  return data.some(t=>isTrainingIncome(t) && txToISO(t)===iso && (t.time||'')===time && scheduleClientName(t)===client);
+}
+function timedWeekTrainings(){
+  if(!schedDate) schedDate=toISODate(new Date());
+  const weekR=schedRange(schedDate,'week');
+  return trainingsInRange(weekR.from, weekR.to).filter(t=>txHour(t)!=null);
+}
+
+function dropScheduleOnCell(idx, iso, hour){
+  const t=data[idx];
+  if(!t || !isTrainingIncome(t) || !iso || !SCHED_HOURS.includes(hour)) return;
+  const time=hourLabel(hour);
+  const client=scheduleClientName(t);
+  const srcIso=txToISO(t);
+  const srcH=txHour(t);
+  if(srcIso===iso && srcH===hour) return;
+  if(hasTrainingAt(iso, time, client)){
+    setSchedStatus('Ten trening już jest w '+time+' · '+formatDayLabel(iso)+'.', true);
+    return;
+  }
+  if(srcH==null){
+    t.iso=iso;
+    t.date=isoToTxDate(iso);
+    t.time=time;
+    t.month=isoToMonthLabel(iso);
+    save();
+    schedDate=iso;
+    schedHour=hour;
+    setSchedStatus('✓ Ustawiono godzinę: '+time+' '+client+' · '+fmt(t.amt));
+  } else {
+    data.push(cloneScheduleTx(t, iso, time));
+    save();
+    schedDate=iso;
+    schedHour=hour;
+    setSchedStatus('✓ Skopiowano: '+time+' '+client+' · '+fmt(t.amt));
+  }
+  syncSchedForm();
+  renderSidebar();
+  renderSchedule();
+}
+
+function copyWeekTrainings(weekOffsets, monthR){
+  const src=timedWeekTrainings();
+  if(!src.length){ setSchedStatus('Brak treningów z godziną w tym tygodniu.', true); return 0; }
+  let added=0, skipped=0, outside=0;
+  src.forEach(t=>{
+    const from=txToISO(t);
+    const time=t.time;
+    const client=scheduleClientName(t);
+    weekOffsets.forEach(w=>{
+      const iso=addDaysISO(from, w*7);
+      if(monthR && (iso<monthR.from || iso>monthR.to)){ outside++; return; }
+      if(hasTrainingAt(iso, time, client)){ skipped++; return; }
+      data.push(cloneScheduleTx(t, iso, time));
+      added++;
+    });
+  });
+  if(added) save();
+  let msg;
+  if(added){
+    msg='✓ Skopiowano '+treningLabel(added);
+    if(skipped) msg+=' · pominięto '+skipped+' (już są)';
+    if(outside) msg+=' · '+outside+' poza miesiącem';
+  } else if(skipped){
+    msg='Wszystkie te treningi już są w docelowych tygodniach.';
+  } else {
+    msg='Nic nie skopiowano.';
+  }
+  setSchedStatus(msg, !added);
+  if(added){
+    if(weekOffsets.length===1 && weekOffsets[0]===1){
+      const d=parseISODate(schedDate);
+      d.setDate(d.getDate()+7);
+      schedDate=toISODate(d);
+      syncSchedForm();
+    }
+    renderSidebar();
+    renderSchedule();
+  }
+  return added;
+}
+
+function copySchedNextWeek(){
+  const n=timedWeekTrainings().length;
+  if(!n){ setSchedStatus('Brak treningów z godziną w tym tygodniu.', true); return; }
+  if(!confirm('Skopiować ten tydzień ('+treningLabel(n)+') na następny? Osoba, kwota i godzina zostaną te same. Jeśli ktoś już tam jest, wpis zostanie pominięty.')) return;
+  copyWeekTrainings([1], null);
+}
+
+function copyMonthForWeekCopy(){
+  const mSel=schedRange(schedDate,'month');
+  const src=timedWeekTrainings();
+  if(src.some(t=>{
+    const n=addDaysISO(txToISO(t),7);
+    return n>=mSel.from && n<=mSel.to;
+  })) return mSel;
+  const weekR=schedRange(schedDate,'week');
+  return schedRange(weekR.to,'month');
+}
+
+function copySchedToMonthEnd(){
+  const src=timedWeekTrainings();
+  if(!src.length){ setSchedStatus('Brak treningów z godziną w tym tygodniu.', true); return; }
+  const monthR=copyMonthForWeekCopy();
+  let maxW=0;
+  src.forEach(t=>{
+    for(let w=1;w<=8;w++){
+      const iso=addDaysISO(txToISO(t), w*7);
+      if(iso>=monthR.from && iso<=monthR.to) maxW=Math.max(maxW,w);
+    }
+  });
+  if(maxW<1){ setSchedStatus('To już ostatni tydzień miesiąca '+monthR.label+'.', true); return; }
+  const offsets=[];
+  for(let w=1;w<=maxW;w++) offsets.push(w);
+  if(!confirm('Skopiować ten tydzień ('+treningLabel(src.length)+') na pozostałe tygodnie: '+monthR.label+'?\n\nTa sama osoba, kwota i godzina. Duplikaty zostaną pominięte — potem możesz przeciągnąć kogoś na inną godzinę.')) return;
+  copyWeekTrainings(offsets, monthR);
+}
+
+let schedDrag=null;
+let schedSuppressClick=false;
+function schedPointerDown(ev, idx){
+  if(ev.target.closest('.cs-del,.tx-del')) return;
+  if(ev.pointerType==='mouse' && ev.button!==0) return;
+  schedDrag={idx, x:ev.clientX, y:ev.clientY, active:false, pointerId:ev.pointerId};
+}
+function schedPointerMove(ev){
+  if(!schedDrag || ev.pointerId!==schedDrag.pointerId) return;
+  const dx=ev.clientX-schedDrag.x, dy=ev.clientY-schedDrag.y;
+  if(!schedDrag.active){
+    if(dx*dx+dy*dy<64) return;
+    const t=data[schedDrag.idx];
+    if(!t){ schedDrag=null; return; }
+    schedDrag.active=true;
+    document.body.classList.add('sched-dragging');
+    const g=document.createElement('div');
+    g.className='cal-drag-ghost';
+    g.textContent=scheduleClientName(t)+' · '+fmt(t.amt);
+    document.body.appendChild(g);
+    schedDrag.ghost=g;
+    try{ ev.target.setPointerCapture(ev.pointerId); }catch(e){}
+  }
+  ev.preventDefault();
+  schedDrag.ghost.style.left=ev.clientX+'px';
+  schedDrag.ghost.style.top=ev.clientY+'px';
+  document.querySelectorAll('#sched-cal .cal-cell.drop').forEach(el=>el.classList.remove('drop'));
+  const under=document.elementFromPoint(ev.clientX, ev.clientY);
+  const cell=under && under.closest('#sched-cal .cal-cell');
+  if(cell) cell.classList.add('drop');
+}
+function schedPointerUp(ev){
+  if(!schedDrag || ev.pointerId!==schedDrag.pointerId) return;
+  const drag=schedDrag;
+  schedDrag=null;
+  document.body.classList.remove('sched-dragging');
+  if(drag.ghost) drag.ghost.remove();
+  document.querySelectorAll('#sched-cal .cal-cell.drop').forEach(el=>el.classList.remove('drop'));
+  if(!drag.active) return;
+  schedSuppressClick=true;
+  setTimeout(()=>{ schedSuppressClick=false; }, 80);
+  const under=document.elementFromPoint(ev.clientX, ev.clientY);
+  const cell=under && under.closest('#sched-cal .cal-cell');
+  if(!cell) return;
+  dropScheduleOnCell(drag.idx, cell.getAttribute('data-iso'), parseInt(cell.getAttribute('data-hour'),10));
+}
+function bindSchedPointer(){
+  if(bindSchedPointer.ok) return;
+  bindSchedPointer.ok=true;
+  document.addEventListener('pointermove', schedPointerMove, {passive:false});
+  document.addEventListener('pointerup', schedPointerUp);
+  document.addEventListener('pointercancel', schedPointerUp);
+}
+
 function addScheduleEntry(){
   const dateEl=document.getElementById('sched-date');
   const nameEl=document.getElementById('sched-name');
   const amtEl=document.getElementById('sched-amt');
   const hourEl=document.getElementById('sched-hour');
-  const statusEl=document.getElementById('sched-status');
   const iso=dateEl.value || toISODate(new Date());
   const client=nameEl.value.trim();
   const amt=parseFloat(String(amtEl.value).replace(',','.'));
   const time=hourEl && hourEl.value ? hourEl.value : hourLabel(SCHED_HOURS[0]);
-  if(!client){ statusEl.textContent='Podaj imię i nazwisko.'; statusEl.className='fstatus err'; return; }
-  if(!(amt>0)){ statusEl.textContent='Podaj kwotę za trening.'; statusEl.className='fstatus err'; return; }
+  if(!client){ setSchedStatus('Podaj imię i nazwisko.', true); return; }
+  if(!(amt>0)){ setSchedStatus('Podaj kwotę za trening.', true); return; }
 
   const month=isoToMonthLabel(iso);
   data.push({
@@ -1615,9 +1827,7 @@ function addScheduleEntry(){
   schedDate=iso;
   nameEl.value='';
   amtEl.value='';
-  statusEl.textContent='✓ Dodano: '+time+' '+client+' · '+fmt(amt);
-  statusEl.className='fstatus';
-  setTimeout(()=>{ if(statusEl.textContent.startsWith('✓')) statusEl.textContent=''; }, 3000);
+  setSchedStatus('✓ Dodano: '+time+' '+client+' · '+fmt(amt));
   renderSidebar();
   renderSchedule();
 }
@@ -1632,6 +1842,7 @@ function deleteScheduleTx(idx){
 
 function renderSchedule(){
   if(!schedDate) schedDate=toISODate(new Date());
+  bindSchedPointer();
   fillSchedHourSelect();
   const dateEl=document.getElementById('sched-date');
   if(dateEl && !dateEl.value) dateEl.value=schedDate;
@@ -1691,10 +1902,10 @@ function renderSchedule(){
   const untimedEl=document.getElementById('sched-untimed');
   if(untimed.length){
     untimedEl.style.display='block';
-    untimedEl.innerHTML = 'Bez godziny: '+untimed.map(t=>{
+    untimedEl.innerHTML = 'Bez godziny — przeciągnij na kratkę: '+untimed.map(t=>{
       const idx=data.indexOf(t);
-      return `${scheduleClientName(t)} ${fmt(t.amt)} <button class="tx-del" style="opacity:1;display:inline" onclick="deleteScheduleTx(${idx})" title="Usuń">✕</button>`;
-    }).join(' · ');
+      return `<span class="cal-chip" onpointerdown="schedPointerDown(event,${idx})">${scheduleClientName(t)} ${fmt(t.amt)} <button class="tx-del" style="opacity:1;display:inline" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button></span>`;
+    }).join(' ');
   } else { untimedEl.style.display='none'; untimedEl.innerHTML=''; }
 
   const DAY_SHORT=['pn','wt','śr','cz','pt','so','nd'];
@@ -1716,14 +1927,14 @@ function renderSchedule(){
         const idx=data.indexOf(t);
         const col=clientColor(scheduleClientName(t));
         const nm=scheduleClientName(t);
-        return `<div class="cal-slot" style="background:${col.bg};color:${col.fg}">
+        return `<div class="cal-slot" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" title="Przeciągnij, żeby skopiować">
           <button class="cs-del" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
           <span class="cs-name">${hourLabel(h)} ${nm}</span>
           <span class="cs-amt">${fmt(t.amt)}</span>
         </div>`;
       }).join('');
       const cls='cal-cell'+(iso===schedDate && h===schedHour?' sel':'')+(iso===today && h===nowH?' now':'');
-      html+=`<div class="${cls}" onclick="openSchedSlot('${iso}',${h})" title="Dodaj trening">${slots||'<div class="cal-empty"></div>'}</div>`;
+      html+=`<div class="${cls}" data-iso="${iso}" data-hour="${h}" onclick="openSchedSlot('${iso}',${h})" title="Kliknij, żeby dodać · przeciągnij osobę, żeby skopiować">${slots||'<div class="cal-empty"></div>'}</div>`;
     });
   });
   document.getElementById('sched-cal').innerHTML=html;
