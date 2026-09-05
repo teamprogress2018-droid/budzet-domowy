@@ -178,6 +178,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .cal-chip.editing,.cal-slot.editing{outline:2px solid var(--accent);outline-offset:1px}
 .cal-drag-ghost{position:fixed;z-index:9999;pointer-events:none;transform:translate(-50%,-120%);background:var(--accent);color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:600;box-shadow:var(--shadow);white-space:nowrap}
 body.sched-dragging,body.sched-dragging *{cursor:grabbing !important}
+body.sched-dragging{touch-action:none;user-select:none}
 
 /* SEGMENTED TOGGLE */
 .seg{display:flex;gap:6px;flex-wrap:wrap}
@@ -1863,14 +1864,14 @@ function schedPointerMove(ev){
   const cell=under && under.closest('#sched-cal .cal-cell');
   if(cell) cell.classList.add('drop');
 }
-function schedPointerUp(ev){
+function endSchedDrag(ev, commit){
   if(!schedDrag || ev.pointerId!==schedDrag.pointerId) return;
   const drag=schedDrag;
   schedDrag=null;
   document.body.classList.remove('sched-dragging');
   if(drag.ghost) drag.ghost.remove();
   document.querySelectorAll('#sched-cal .cal-cell.drop').forEach(el=>el.classList.remove('drop'));
-  if(!drag.active) return;
+  if(!commit || !drag.active) return;
   schedSuppressClick=true;
   setTimeout(()=>{ schedSuppressClick=false; }, 80);
   const under=document.elementFromPoint(ev.clientX, ev.clientY);
@@ -1878,12 +1879,15 @@ function schedPointerUp(ev){
   if(!cell) return;
   dropScheduleOnCell(drag.idx, cell.getAttribute('data-iso'), parseInt(cell.getAttribute('data-hour'),10));
 }
+function schedPointerUp(ev){ endSchedDrag(ev, true); }
+function schedPointerCancel(ev){ endSchedDrag(ev, false); }
 function bindSchedPointer(){
   if(bindSchedPointer.ok) return;
   bindSchedPointer.ok=true;
   document.addEventListener('pointermove', schedPointerMove, {passive:false});
   document.addEventListener('pointerup', schedPointerUp);
-  document.addEventListener('pointercancel', schedPointerUp);
+  document.addEventListener('pointercancel', schedPointerCancel);
+  document.addEventListener('lostpointercapture', schedPointerCancel);
 }
 
 function cancelSchedEdit(skipRender){
