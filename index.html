@@ -450,7 +450,7 @@ body.sched-dragging,body.sched-dragging *{cursor:grabbing !important}
       <div class="fg"><label>Imię i nazwisko</label><input id="sched-name" type="text" placeholder="np. Arek"></div>
     </div>
     <div class="frow f3">
-      <div class="fg"><label>Kwota za trening (zł)</label><input id="sched-amt" type="number" min="0.01" step="0.01" placeholder="0"></div>
+      <div class="fg"><label>Kwota za trening (zł)</label><input id="sched-amt" type="number" min="0.01" step="0.01" placeholder="0" oninput="onSchedAmtInput()"></div>
       <div class="fg"><label>Towarzystwo</label>
         <div class="seg" id="sched-guest-seg">
           <button type="button" class="btn-s" id="sched-guest-solo" onclick="setSchedGuest(false)" style="flex:1">Sam</button>
@@ -461,8 +461,13 @@ body.sched-dragging,body.sched-dragging *{cursor:grabbing !important}
         <div class="seg" id="sched-pay-seg">
           <button type="button" class="btn-s" id="sched-pay-cash" onclick="setSchedPay('cash')" style="flex:1">💵 Gotówka</button>
           <button type="button" class="btn-s" id="sched-pay-bank" onclick="setSchedPay('bank')" style="flex:1">🏦 Przelew</button>
+          <button type="button" class="btn-s" id="sched-pay-split" onclick="setSchedPay('split')" style="flex:1.2;display:none" title="Jedna osoba gotówką, druga przelewem">💵+🏦 Różnie</button>
         </div>
       </div>
+    </div>
+    <div class="frow" id="sched-split-row" style="display:none">
+      <div class="fg"><label>Gotówka (jedna osoba)</label><input id="sched-amt-cash" type="number" min="0.01" step="0.01" placeholder="0" oninput="onSchedSplitEdit('cash')"></div>
+      <div class="fg"><label>Przelew (druga osoba)</label><input id="sched-amt-bank" type="number" min="0.01" step="0.01" placeholder="0" oninput="onSchedSplitEdit('bank')"></div>
     </div>
     <div class="factions">
       <button class="btn-p" onclick="addScheduleEntry()">Dodaj trening</button>
@@ -1137,6 +1142,11 @@ function fmt(v, sign=false){
 function isIncome(t){ return t.amt > 0; }
 function isExpense(t){ return t.amt < 0; }
 function isCash(t){ return t.src === 'cash'; }
+function cashIncomeOf(t){
+  if(!t || !(t.amt>0)) return 0;
+  if(t.src==='split') return Math.max(0, Number(t.cashAmt)||0);
+  return t.src==='cash' ? t.amt : 0;
+}
 
 function getHoldings(){
   try {
@@ -1239,7 +1249,7 @@ function mdata(month){
   const tx = data.filter(t=>t.month===month);
   const inc = tx.filter(isIncome).reduce((s,t)=>s+t.amt,0);
   const exp = Math.abs(tx.filter(isExpense).reduce((s,t)=>s+t.amt,0));
-  const cashInc = tx.filter(t=>isIncome(t)&&isCash(t)).reduce((s,t)=>s+t.amt,0);
+  const cashInc = tx.filter(isIncome).reduce((s,t)=>s+cashIncomeOf(t),0);
   const cashExp = Math.abs(tx.filter(t=>isExpense(t)&&isCash(t)).reduce((s,t)=>s+t.amt,0));
   const bycat={};
   tx.filter(isExpense).forEach(t=>{ bycat[t.cat]=(bycat[t.cat]||0)+Math.abs(t.amt); });
@@ -1255,6 +1265,8 @@ function txHtml(t){
   const col = t.amt>0?'var(--green)':'var(--red)';
   const srcBadge = t.src==='cash'
     ? '<span class="tx-badge" style="background:var(--blue-bg);color:var(--blue)">💵 Gotówka</span>'
+    : t.src==='split'
+    ? '<span class="tx-badge" style="background:var(--blue-bg);color:var(--blue)">💵 '+fmt(t.cashAmt||0)+' + 🏦 '+fmt(t.bankAmt||0)+'</span>'
     : '';
   const bizBadge = ['Koszty firmowe','Wynagrodzenie','Plan treningowy'].includes(t.cat)
     ? `<span class="tx-badge" style="background:var(--purple-bg);color:var(--purple)">${CAT_EMOJI[t.cat]||'•'} ${t.cat}</span>`
@@ -1545,8 +1557,65 @@ function trainingsInRange(from,to){
 }
 function sumTrainings(list){ return list.reduce((s,t)=>s+(t.amt||0),0); }
 
-function setSchedGuest(v){ schedGuest=!!v; renderSchedule(); }
-function setSchedPay(v){ schedPay=v==='bank'?'bank':'cash'; renderSchedule(); }
+function setSchedGuest(v){
+  schedGuest=!!v;
+  if(!schedGuest && schedPay==='split') schedPay='cash';
+  renderSchedule();
+  if(schedPay==='split') fillSchedSplitFromTotal();
+}
+function setSchedPay(v){
+  if(v==='split'){
+    schedPay='split';
+    schedGuest=true;
+  } else {
+    schedPay=v==='bank'?'bank':'cash';
+  }
+  renderSchedule();
+  if(schedPay==='split') fillSchedSplitFromTotal();
+}
+function schedTotalAmt(){
+  const el=document.getElementById('sched-amt');
+  return parseFloat(String(el&&el.value||'').replace(',','.'))||0;
+}
+function fillSchedSplitFromTotal(){
+  const amt=schedTotalAmt();
+  const cashEl=document.getElementById('sched-amt-cash');
+  const bankEl=document.getElementById('sched-amt-bank');
+  if(!cashEl||!bankEl) return;
+  if(!(amt>0)){ cashEl.value=''; bankEl.value=''; return; }
+  const cash=round2(amt/2);
+  cashEl.value=cash;
+  bankEl.value=round2(amt-cash);
+}
+function onSchedAmtInput(){
+  if(schedPay==='split') fillSchedSplitFromTotal();
+}
+function onSchedSplitEdit(which){
+  const total=schedTotalAmt();
+  const cashEl=document.getElementById('sched-amt-cash');
+  const bankEl=document.getElementById('sched-amt-bank');
+  if(!cashEl||!bankEl) return;
+  let cash=parseFloat(String(cashEl.value).replace(',','.'));
+  let bank=parseFloat(String(bankEl.value).replace(',','.'));
+  if(!(cash>=0)) cash=0;
+  if(!(bank>=0)) bank=0;
+  if(which==='cash'){
+    if(total>0 && cash>total) cash=total;
+    bank=total>0?round2(total-cash):bank;
+    bankEl.value=bank||'';
+    cashEl.value=cash||'';
+  } else {
+    if(total>0 && bank>total) bank=total;
+    cash=total>0?round2(total-bank):cash;
+    cashEl.value=cash||'';
+    bankEl.value=bank||'';
+  }
+}
+function schedPayHint(t){
+  if(t.src==='split') return '💵 '+fmt(t.cashAmt||0)+' + 🏦 '+fmt(t.bankAmt||0);
+  if(t.src==='cash') return '💵';
+  return '🏦';
+}
 
 function syncSchedForm(){
   const dateEl=document.getElementById('sched-date');
@@ -1611,7 +1680,7 @@ function newSchedTxId(){
   return Date.now()*1000 + newSchedTxId.n;
 }
 function cloneScheduleTx(t, iso, time){
-  return {
+  const c={
     id: newSchedTxId(),
     date: isoToTxDate(iso),
     iso,
@@ -1623,6 +1692,11 @@ function cloneScheduleTx(t, iso, time){
     src: t.src||'cash',
     withGuest: !!t.withGuest
   };
+  if(t.src==='split'){
+    c.cashAmt=Number(t.cashAmt)||0;
+    c.bankAmt=Number(t.bankAmt)||0;
+  }
+  return c;
 }
 function hasTrainingAt(iso, time, client){
   return data.some(t=>isTrainingIncome(t) && txToISO(t)===iso && (t.time||'')===time && scheduleClientName(t)===client);
@@ -1814,13 +1888,11 @@ function addScheduleEntry(){
   const hourEl=document.getElementById('sched-hour');
   const iso=dateEl.value || toISODate(new Date());
   const client=nameEl.value.trim();
-  const amt=parseFloat(String(amtEl.value).replace(',','.'));
+  let amt=parseFloat(String(amtEl.value).replace(',','.'));
   const time=hourEl && hourEl.value ? hourEl.value : hourLabel(SCHED_HOURS[0]);
   if(!client){ setSchedStatus('Podaj imię i nazwisko.', true); return; }
-  if(!(amt>0)){ setSchedStatus('Podaj kwotę za trening.', true); return; }
 
-  const month=isoToMonthLabel(iso);
-  data.push({
+  const rec={
     id: Date.now(),
     date: isoToTxDate(iso),
     iso,
@@ -1828,16 +1900,34 @@ function addScheduleEntry(){
     name: 'Plan treningowy — '+client,
     cat: 'Plan treningowy',
     amt,
-    month,
-    src: schedPay,
-    withGuest: schedGuest
-  });
+    month: isoToMonthLabel(iso),
+    src: schedPay==='split'?'split':(schedPay==='bank'?'bank':'cash'),
+    withGuest: schedGuest || schedPay==='split'
+  };
+  if(schedPay==='split'){
+    const cash=parseFloat(String((document.getElementById('sched-amt-cash')||{}).value||'').replace(',','.'));
+    const bank=parseFloat(String((document.getElementById('sched-amt-bank')||{}).value||'').replace(',','.'));
+    if(!(cash>0) || !(bank>0)){ setSchedStatus('Podaj kwotę gotówki i przelewu — po jednej na osobę.', true); return; }
+    rec.cashAmt=round2(cash);
+    rec.bankAmt=round2(bank);
+    rec.amt=round2(rec.cashAmt+rec.bankAmt);
+    rec.withGuest=true;
+  } else if(!(amt>0)){
+    setSchedStatus('Podaj kwotę za trening.', true); return;
+  }
+
+  const month=rec.month;
+  data.push(rec);
   save();
   curMonth=month;
   schedDate=iso;
   nameEl.value='';
   amtEl.value='';
-  setSchedStatus('✓ Dodano: '+time+' '+client+' · '+fmt(amt));
+  const cashEl=document.getElementById('sched-amt-cash');
+  const bankEl=document.getElementById('sched-amt-bank');
+  if(cashEl) cashEl.value='';
+  if(bankEl) bankEl.value='';
+  setSchedStatus('✓ Dodano: '+time+' '+client+' · '+fmt(rec.amt)+(rec.src==='split'?' · 💵'+fmt(rec.cashAmt)+' + 🏦'+fmt(rec.bankAmt):''));
   renderSidebar();
   renderSchedule();
 }
@@ -1863,7 +1953,14 @@ function renderSchedule(){
     document.getElementById('sched-guest-duo').classList.toggle('active', !!schedGuest);
     document.getElementById('sched-pay-cash').classList.toggle('active', schedPay==='cash');
     document.getElementById('sched-pay-bank').classList.toggle('active', schedPay==='bank');
+    const splitBtn=document.getElementById('sched-pay-split');
+    if(splitBtn){
+      splitBtn.style.display=schedGuest || schedPay==='split' ? '' : 'none';
+      splitBtn.classList.toggle('active', schedPay==='split');
+    }
   }
+  const splitRow=document.getElementById('sched-split-row');
+  if(splitRow) splitRow.style.display=schedPay==='split'?'':'none';
 
   const dayR=schedRange(schedDate,'day');
   const weekR=schedRange(schedDate,'week');
@@ -1940,7 +2037,7 @@ function renderSchedule(){
         return `<div class="cal-slot" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" title="Przeciągnij, żeby skopiować">
           <button class="cs-del" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
           <span class="cs-name">${hourLabel(h)} ${nm}</span>
-          <span class="cs-amt">${fmt(t.amt)}</span>
+          <span class="cs-amt">${fmt(t.amt)} · ${schedPayHint(t)}</span>
         </div>`;
       }).join('');
       const cls='cal-cell'+(iso===schedDate && h===schedHour?' sel':'')+(iso===today && h===nowH?' now':'');
@@ -2009,12 +2106,12 @@ function renderTx(){
   const cf=document.getElementById('tx-cat');
   if(cf){ const prev=cf.value; cf.innerHTML='<option value="">Wszystkie kategorie</option>'+cats.map(c=>`<option${c===prev?' selected':''}>${c}</option>`).join(''); }
   const sf=document.getElementById('tx-src');
-  if(sf){ const prev=sf.value; const srcs=[...new Set(txM.map(t=>t.src||'bank'))]; sf.innerHTML='<option value="">Wszystkie źródła</option>'+srcs.map(s=>`<option value="${s}"${s===prev?' selected':''}>${s==='cash'?'💵 Gotówka':'🏦 Bank/karta'}</option>`).join(''); }
+  if(sf){ const prev=sf.value; const srcs=[...new Set(txM.map(t=>t.src||'bank'))]; sf.innerHTML='<option value="">Wszystkie źródła</option>'+srcs.map(s=>`<option value="${s}"${s===prev?' selected':''}>${s==='cash'?'💵 Gotówka':s==='split'?'💵+🏦 Gotówka + przelew':'🏦 Bank/karta'}</option>`).join(''); }
 
   const filtered = txM.filter(t=>
     (!q||t.name.toLowerCase().includes(q)||t.cat.toLowerCase().includes(q))&&
     (!catF||t.cat===catF)&&
-    (!typeF||(typeF==='expense'?isExpense(t):typeF==='income'?isIncome(t):isCash(t)))&&
+    (!typeF||(typeF==='expense'?isExpense(t):typeF==='income'?isIncome(t):isCash(t)||t.src==='split'))&&
     (!srcF||t.src===srcF)
   ).sort((a,b)=>{
     const[da,ma]=a.date.split('.').map(Number);const[db,mb]=b.date.split('.').map(Number);
