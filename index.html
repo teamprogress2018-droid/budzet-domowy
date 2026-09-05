@@ -436,7 +436,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="frow f3">
       <div class="fg"><label>Data</label><input id="sched-date" type="date" onchange="schedDate=this.value;renderSchedule()"></div>
       <div class="fg"><label>Godzina</label>
-        <select id="sched-hour" onchange="schedHour=parseInt(this.value,10)||8;renderSchedule()"></select>
+        <select id="sched-hour" onchange="schedHour=parseInt(this.value,10)||6;renderSchedule()"></select>
       </div>
       <div class="fg"><label>Imię i nazwisko</label><input id="sched-name" type="text" placeholder="np. Arek"></div>
     </div>
@@ -1418,7 +1418,7 @@ function renderIncome(){
 const DAYS_PL = ['niedziela','poniedziałek','wtorek','środa','czwartek','piątek','sobota'];
 const MONTHS_PL_GEN = ['stycznia','lutego','marca','kwietnia','maja','czerwca','lipca','sierpnia','września','października','listopada','grudnia'];
 let schedDate = null;
-let schedHour = 8;
+let schedHour = 6;
 let schedGuest = false;
 let schedPay = 'cash';
 
@@ -1494,7 +1494,7 @@ function schedRange(iso, period){
   return {from:toISODate(start), to:toISODate(end), label: String(d.getFullYear())};
 }
 
-const SCHED_HOURS = [8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
+const SCHED_HOURS = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
 const SLOT_COLORS = [
   {bg:'#dbeafe',fg:'#1e3a8a'},
   {bg:'#dcfce7',fg:'#166534'},
@@ -1523,8 +1523,9 @@ function isoWeekNum(d){
 }
 function fillSchedHourSelect(){
   const sel=document.getElementById('sched-hour');
-  if(!sel || sel.options.length) return;
+  if(!sel) return;
   sel.innerHTML = SCHED_HOURS.map(h=>`<option value="${hourLabel(h)}">${hourLabel(h)}</option>`).join('');
+  sel.value = hourLabel(SCHED_HOURS.includes(schedHour)?schedHour:SCHED_HOURS[0]);
 }
 function trainingsInRange(from,to){
   return data.filter(t=>{
@@ -1549,7 +1550,7 @@ function goSchedToday(){
   const now=new Date();
   schedDate=toISODate(now);
   const nowH=now.getHours();
-  schedHour=SCHED_HOURS.includes(nowH)?nowH:8;
+  schedHour=SCHED_HOURS.includes(nowH)?nowH:SCHED_HOURS[0];
   fillSchedHourSelect();
   syncSchedForm();
   renderSchedule();
@@ -1591,7 +1592,7 @@ function addScheduleEntry(){
   const iso=dateEl.value || toISODate(new Date());
   const client=nameEl.value.trim();
   const amt=parseFloat(String(amtEl.value).replace(',','.'));
-  const time=hourEl && hourEl.value ? hourEl.value : '08:00';
+  const time=hourEl && hourEl.value ? hourEl.value : hourLabel(SCHED_HOURS[0]);
   if(!client){ statusEl.textContent='Podaj imię i nazwisko.'; statusEl.className='fstatus err'; return; }
   if(!(amt>0)){ statusEl.textContent='Podaj kwotę za trening.'; statusEl.className='fstatus err'; return; }
 
