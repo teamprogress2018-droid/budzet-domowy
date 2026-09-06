@@ -835,8 +835,8 @@ body.sched-dragging{touch-action:none;user-select:none}
   <div class="card form-card" style="margin-bottom:16px">
     <div class="sec-lbl">📄 Import wyciągu Santander PDF</div>
     <div class="tip">
-      <strong>Jak importować:</strong> Otwórz PDF wyciągu w Chrome → <strong>Ctrl+A</strong> → <strong>Ctrl+C</strong> → wklej poniżej. Miesiąc zostanie wykryty automatycznie.<br>
-      Obsługuje też historię z aplikacji ING, PKO, Revolut (kopiuj tekst z ekranu).
+      <strong>Jak importować:</strong> wklej <strong>zrzut ekranu</strong> z aplikacji banku (Ctrl+V) albo zdjęcie z WhatsApp — odczytam tekst ze zdjęcia.<br>
+      Albo w PDF zaznacz tekst → <strong>Ctrl+C</strong> → <strong>Wklej ze schowka</strong>. Możesz też upuścić plik <strong>.txt / .jpg / .png</strong>.
     </div>
     <div class="frow f1">
       <div class="fg"><label>Miesiąc (auto-wykrywany lub wpisz ręcznie)</label>
@@ -846,14 +846,14 @@ body.sched-dragging{touch-action:none;user-select:none}
     <div class="frow f1">
       <div class="fg"><label>Wklej tekst, upuść plik albo przeciągnij zaznaczenie</label>
         <div id="imp-drop" class="imp-drop">
-          <textarea id="imp-text" placeholder="Kliknij tutaj i wklej (Ctrl+V). Możesz też upuścić plik .txt albo przeciągnąć skopiowany tekst."></textarea>
+          <textarea id="imp-text" placeholder="Wklej zrzut ekranu z banku (Ctrl+V), zdjęcie z WhatsApp albo tekst z PDF."></textarea>
         </div>
       </div>
     </div>
     <div class="factions" style="margin-top:8px;margin-bottom:10px">
-      <button type="button" class="btn-s" onclick="pasteImportClipboard()">Wklej ze schowka</button>
-      <label class="btn-s" style="margin:0;cursor:pointer">Wybierz plik
-        <input id="imp-file" type="file" accept=".txt,.csv,text/plain" hidden onchange="loadImportFile(this)">
+      <button type="button" class="btn-p" onclick="pasteImportClipboard()">Wklej ze schowka</button>
+      <label class="btn-s" style="margin:0;cursor:pointer">Wybierz plik / zdjęcie
+        <input id="imp-file" type="file" accept=".txt,.csv,text/plain,image/*,.jpg,.jpeg,.png,.webp,.gif" hidden onchange="loadImportFile(this)">
       </label>
     </div>
     <div class="frow">
@@ -2480,12 +2480,95 @@ function doQuickAdd(){
   renderPage();
 }
 
+function isImageFile(f){
+  if(!f) return false;
+  if(f.type && f.type.startsWith('image/')) return true;
+  return /\.(jpe?g|png|webp|gif|bmp|heic)$/i.test(f.name||'');
+}
+function firstImageFromTransfer(transfer){
+  if(!transfer) return null;
+  const files=[...(transfer.files||[])];
+  const named=files.find(isImageFile);
+  if(named) return named;
+  const items=transfer.items?[...transfer.items]:[];
+  for(const it of items){
+    if(it.kind==='file' && it.type && it.type.startsWith('image/')){
+      try{ return it.getAsFile(); }catch(e){}
+    }
+  }
+  return null;
+}
+function looksLikeBinaryGarbage(text){
+  const t=String(text||'');
+  if(t.length<80) return false;
+  const bad=(t.match(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFD]/g)||[]).length;
+  const weird=(t.match(/[^\t\n\r\x20-\x7E\u00A0-\u024FąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g)||[]).length;
+  return bad>20 || (t.length>400 && weird/t.length>0.12);
+}
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  if(loadTesseract.p) return loadTesseract.p;
+  loadTesseract.p=new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(new Error('tesseract'));
+    s.onerror=()=>reject(new Error('tesseract'));
+    document.head.appendChild(s);
+  });
+  return loadTesseract.p;
+}
+async function ocrImportImage(fileOrBlob, label){
+  const st=document.getElementById('imp-status');
+  const ta=document.getElementById('imp-text');
+  if(st){ st.textContent='⏳ Odczytuję zdjęcie rachunku… to może chwilę zająć'; st.className='fstatus'; }
+  if(ta && looksLikeBinaryGarbage(ta.value)) ta.value='';
+  try{
+    const T=await loadTesseract();
+    const result=await T.recognize(fileOrBlob, 'pol+eng', {
+      logger:m=>{
+        if(st && m && m.status==='recognizing text'){
+          st.textContent='⏳ Odczytuję zdjęcie… '+Math.round((m.progress||0)*100)+'%';
+        }
+      }
+    });
+    const text=String(result&&result.data&&result.data.text||'').trim();
+    if(!text || text.length<8){
+      if(st){ st.textContent='Nie odczytałem tekstu ze zdjęcia. Zrób wyraźniejszy zrzut albo skopiuj tekst z PDF.'; st.className='fstatus err'; }
+      return;
+    }
+    setImportText(text, '✓ Odczytano ze zdjęcia'+(label?': '+label:'')+' — sprawdź i kliknij Importuj');
+  }catch(err){
+    if(st){ st.textContent='Nie udało się odczytać zdjęcia. Wklej tekst skopiowany z wyciągu PDF.'; st.className='fstatus err'; }
+  }
+}
+function setImportText(text, note){
+  const ta=document.getElementById('imp-text');
+  const st=document.getElementById('imp-status');
+  if(!ta) return false;
+  ta.value=String(text||'');
+  try{ ta.focus(); }catch(e){}
+  if(st){ st.textContent=note||('✓ Wstawiono '+ta.value.length+' znaków'); st.className='fstatus'; }
+  return true;
+}
+
 function bindImportDrop(){
   const box=document.getElementById('imp-drop');
   const ta=document.getElementById('imp-text');
   if(!box||!ta||bindImportDrop.ok) return;
   bindImportDrop.ok=true;
   const stop=e=>{ e.preventDefault(); e.stopPropagation(); };
+  function takeFromTransfer(transfer){
+    const img=firstImageFromTransfer(transfer);
+    if(img){ ocrImportImage(img, img.name||'zrzut ekranu'); return true; }
+    const text=(transfer.getData('text/plain')||transfer.getData('text')||'').trim();
+    if(text && !looksLikeBinaryGarbage(text)){
+      setImportText(text, '✓ Upuśćono tekst ('+text.length+' znaków)');
+      return true;
+    }
+    const f=transfer.files && transfer.files[0];
+    if(f){ readImportFile(f); return true; }
+    return false;
+  }
   box.addEventListener('dragenter', e=>{ stop(e); box.classList.add('over'); });
   box.addEventListener('dragover', e=>{ stop(e); box.classList.add('over'); });
   box.addEventListener('dragleave', e=>{
@@ -2494,25 +2577,32 @@ function bindImportDrop(){
   box.addEventListener('drop', e=>{
     stop(e);
     box.classList.remove('over');
-    const dt=e.dataTransfer;
-    if(!dt) return;
-    const text=(dt.getData('text/plain')||dt.getData('text')||'').trim();
-    if(text){
-      ta.value=text;
-      const st=document.getElementById('imp-status');
-      if(st){ st.textContent='✓ Upuśćono tekst ('+text.length+' znaków)'; st.className='fstatus'; }
+    if(e.dataTransfer) takeFromTransfer(e.dataTransfer);
+  });
+  document.addEventListener('paste', e=>{
+    if(curPage!=='add') return;
+    const cd=e.clipboardData;
+    if(!cd) return;
+    const img=firstImageFromTransfer(cd);
+    if(img){
+      e.preventDefault();
+      ocrImportImage(img, img.name||'zrzut ekranu');
       return;
     }
-    if(dt.files && dt.files[0]) readImportFile(dt.files[0]);
-  });
+    const text=(cd.getData('text/plain')||'').trim();
+    if(text && looksLikeBinaryGarbage(text)){
+      e.preventDefault();
+      const st=document.getElementById('imp-status');
+      if(st){ st.textContent='To jest zdjęcie, nie tekst. Wklejam jeszcze raz jako obraz…'; st.className='fstatus err'; }
+    }
+  }, true);
   ta.addEventListener('paste', e=>{
     const cd=e.clipboardData;
     if(!cd) return;
-    const files=[...cd.files||[]];
-    if(files[0] && files[0].type && !files[0].type.startsWith('text')) return;
-    if(files[0] && !cd.getData('text/plain')){
+    const img=firstImageFromTransfer(cd);
+    if(img){
       e.preventDefault();
-      readImportFile(files[0]);
+      ocrImportImage(img, img.name||'zrzut ekranu');
     }
   });
 }
@@ -2521,17 +2611,31 @@ async function pasteImportClipboard(){
   const st=document.getElementById('imp-status');
   const ta=document.getElementById('imp-text');
   try{
+    if(navigator.clipboard && navigator.clipboard.read){
+      const items=await navigator.clipboard.read();
+      for(const item of items){
+        const imgType=(item.types||[]).find(t=>String(t).startsWith('image/'));
+        if(imgType){
+          const blob=await item.getType(imgType);
+          await ocrImportImage(blob, 'schowek');
+          return;
+        }
+      }
+    }
     const text=await navigator.clipboard.readText();
     if(!String(text||'').trim()){
-      if(st){ st.textContent='Schowek jest pusty — skopiuj tekst z PDF i spróbuj jeszcze raz.'; st.className='fstatus err'; }
+      if(st){ st.textContent='Schowek jest pusty — wklej zrzut ekranu albo tekst z PDF.'; st.className='fstatus err'; }
       if(ta) ta.focus();
       return;
     }
-    ta.value=text;
-    if(st){ st.textContent='✓ Wklejono '+text.length+' znaków ze schowka'; st.className='fstatus'; }
+    if(looksLikeBinaryGarbage(text)){
+      if(st){ st.textContent='W schowku jest zdjęcie w złym formacie. Wklej Ctrl+V w pole albo wybierz plik jpg/png.'; st.className='fstatus err'; }
+      return;
+    }
+    setImportText(text, '✓ Wklejono '+text.length+' znaków ze schowka');
   }catch(err){
     if(ta) ta.focus();
-    if(st){ st.textContent='Kliknij pole i wklej Ctrl+V (przeglądarka zablokowała schowek).'; st.className='fstatus err'; }
+    if(st){ st.textContent='Kliknij pole i wklej Ctrl+V (zrzut ekranu albo tekst).'; st.className='fstatus err'; }
   }
 }
 
@@ -2545,9 +2649,22 @@ function readImportFile(f){
   const st=document.getElementById('imp-status');
   const ta=document.getElementById('imp-text');
   if(!f||!ta) return;
+  if(isImageFile(f)){
+    ocrImportImage(f, f.name||'zdjęcie');
+    return;
+  }
+  if(/\.(pdf)$/i.test(f.name||'') || f.type==='application/pdf'){
+    if(st){ st.textContent='PDF-a nie wczytam jako pliku. Otwórz go, skopiuj tekst (Ctrl+A, Ctrl+C) i wklej tutaj.'; st.className='fstatus err'; }
+    return;
+  }
   const reader=new FileReader();
   reader.onload=()=>{
-    ta.value=String(reader.result||'');
+    const text=String(reader.result||'');
+    if(looksLikeBinaryGarbage(text)){
+      if(st){ st.textContent='Ten plik to nie tekst. Wklej zrzut ekranu (jpg/png) albo skopiuj treść z PDF.'; st.className='fstatus err'; }
+      return;
+    }
+    ta.value=text;
     if(st){ st.textContent='✓ Wczytano: '+f.name+' ('+ta.value.length+' znaków)'; st.className='fstatus'; }
   };
   reader.onerror=()=>{ if(st){ st.textContent='Nie udało się odczytać pliku.'; st.className='fstatus err'; } };
@@ -2678,7 +2795,12 @@ function parseGeneric(text, month){
 function doImport(){
   const text=document.getElementById('imp-text').value.trim();
   const statusEl=document.getElementById('imp-status');
-  if(!text){ statusEl.textContent='Wklej tekst.'; statusEl.className='fstatus err'; return; }
+  if(!text){ statusEl.textContent='Wklej zrzut ekranu albo tekst z wyciągu.'; statusEl.className='fstatus err'; return; }
+  if(looksLikeBinaryGarbage(text)){
+    statusEl.textContent='To jest zdjęcie wklejone jako plik, nie tekst. Wyczyść pole i wklej zrzut jeszcze raz (Ctrl+V) — odczytam napisy ze zdjęcia.';
+    statusEl.className='fstatus err';
+    return;
+  }
 
   // Miesiąc: pole ręczne ma ZAWSZE priorytet nad auto-detekcją
   const inputM=document.getElementById('imp-month').value.trim();
