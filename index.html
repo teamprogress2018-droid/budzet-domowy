@@ -140,6 +140,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .btn-danger:hover{background:var(--red-bg)}
 .fstatus{font-size:12px;color:var(--green);margin-left:4px}
 .fstatus.err{color:var(--red)}
+.chk{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--text2);margin:2px 0 8px;cursor:pointer;line-height:1.45}
+.chk input{width:16px;height:16px;margin-top:1px;flex-shrink:0;accent-color:var(--accent)}
+.chk small{display:block;font-size:11px;color:var(--text3);font-weight:400}
 .sec-lbl{font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .tip{background:var(--amber-bg);border:1px solid rgba(183,119,13,.2);border-radius:var(--rsm);padding:10px 13px;font-size:11.5px;color:var(--amber);margin-bottom:12px;line-height:1.6}
 
@@ -641,7 +644,7 @@ body.sched-dragging{touch-action:none;user-select:none}
 
 <!-- SUBSCRIPTIONS PAGE -->
 <div class="page" id="page-subs">
-  <div class="ph"><div class="ph-left"><h2>Subskrypcje</h2><p>Wszystkie cykliczne opłaty w jednym miejscu</p></div>
+  <div class="ph"><div class="ph-left"><h2>Subskrypcje</h2><p>Cykliczne opłaty — ZUS, czynsz, abonament. Zaznacz „wpisuj automatycznie”, a wydatek pojawi się sam co miesiąc</p></div>
     <button class="btn-p" style="flex-shrink:0" onclick="showAddSub()">+ Dodaj subskrypcję</button>
   </div>
 
@@ -661,12 +664,22 @@ body.sched-dragging{touch-action:none;user-select:none}
   <div class="card form-card" id="sub-form-modal" style="display:none;margin-bottom:16px;padding:18px">
     <div class="sh" style="margin-bottom:12px"><h3>Nowa subskrypcja</h3></div>
     <input type="hidden" id="sub-edit-id">
-    <div class="fg"><label>Nazwa (np. Netflix, Spotify, siłownia)</label><input id="sub-name" placeholder="Nazwa usługi"></div>
+    <div class="fg"><label>Nazwa (np. ZUS, Netflix, czynsz)</label><input id="sub-name" placeholder="Nazwa opłaty"></div>
     <div class="fg-row">
-      <div class="fg"><label>Kwota (zł)</label><input id="sub-amount" type="number" placeholder="0"></div>
+      <div class="fg"><label>Kwota (zł)</label><input id="sub-amount" type="number" placeholder="0" step="0.01"></div>
       <div class="fg"><label>Cykl</label><select id="sub-cycle"><option value="monthly">Miesięcznie</option><option value="yearly">Rocznie</option></select></div>
     </div>
-    <div class="fg"><label>Najbliższa płatność</label><input id="sub-next-date" type="date"></div>
+    <div class="fg-row">
+      <div class="fg"><label>Kategoria</label><select id="sub-cat"></select></div>
+      <div class="fg"><label>Źródło</label>
+        <select id="sub-src"><option value="bank">Przelew / konto</option><option value="cash">Gotówka</option></select>
+      </div>
+    </div>
+    <div class="fg"><label>Pierwsza / najbliższa płatność</label><input id="sub-next-date" type="date"></div>
+    <label class="chk" style="margin-top:10px">
+      <input type="checkbox" id="sub-autopost" checked>
+      <span>Wpisuj automatycznie jako wydatek co cykl<small>ZUS, czynsz, abonament trafią same na listę wydatków. Netflix z wyciągu zostaw odznaczone.</small></span>
+    </label>
     <div class="factions" style="margin-top:14px">
       <button class="btn-p" onclick="saveSubForm()">Zapisz</button>
       <button class="btn-s" onclick="closeSubForm()">Anuluj</button>
@@ -795,7 +808,7 @@ body.sched-dragging{touch-action:none;user-select:none}
       </div>
       <div class="fg">
         <label>Data</label>
-        <input type="text" id="q-date" placeholder="np. 15.06">
+        <input type="text" id="q-date" placeholder="np. 15.06 albo 06.08.2026" oninput="syncQuickMonthFromDate()">
       </div>
     </div>
     <div class="frow f1">
@@ -804,6 +817,10 @@ body.sched-dragging{touch-action:none;user-select:none}
         <input type="text" id="q-month" placeholder="np. Czerwiec 2026">
       </div>
     </div>
+    <label class="chk" id="q-recurring-wrap">
+      <input type="checkbox" id="q-recurring">
+      <span>Powtarzaj co miesiąc<small>Wpisze ten wydatek automatycznie w kolejnych miesiącach (ZUS, czynsz, abonament).</small></span>
+    </label>
     <div class="factions">
       <button class="btn-p" onclick="doQuickAdd()">Dodaj transakcję</button>
       <span class="fstatus" id="q-status"></span>
@@ -1003,7 +1020,7 @@ body.sched-dragging{touch-action:none;user-select:none}
 // ═══════════════════════════════════════════════════
 const CAT_COLORS = {
   'Spożywcze':'#1D9E75','Paliwo':'#E76F51','Zakupy online':'#7F77DD',
-  'Prezenty/różne':'#D4537E','Jedzenie poza domem':'#E9A824','Subskrypcje':'#378ADD',
+  'Prezenty/różne':'#D4537E','Jedzenie poza domem':'#E9A824','Subskrypcje':'#378ADD','ZUS / podatki':'#7C3AED',
   'Sport i hobby':'#639922','Edukacja':'#8B5CF6','Dom i mieszkanie':'#888780',
   'Zdrowie':'#E24B4A','Kosmetyki':'#F4A261','Telefon/TV/internet':'#0F6E56',
   'Opłaty bankowe':'#9b9b95','Transport/parking':'#5F5E5A',
@@ -1017,7 +1034,7 @@ const CAT_EMOJI = {
   'Spożywcze':'🛒','Paliwo':'⛽','Zakupy online':'💻','Prezenty/różne':'🎁',
   'Jedzenie poza domem':'🍔','Subskrypcje':'🔄','Sport i hobby':'🏋️','Edukacja':'📚',
   'Dom i mieszkanie':'🏠','Zdrowie':'❤️','Kosmetyki':'✨','Telefon/TV/internet':'📡',
-  'Opłaty bankowe':'🏦','Transport/parking':'🚗','Telefon dziecka':'📱',
+  'Opłaty bankowe':'🏦','ZUS / podatki':'📄','Transport/parking':'🚗','Telefon dziecka':'📱',
   'Koszty firmowe':'🏢','Wynagrodzenie':'💼','Plan treningowy':'💪',
   'Spłata długu':'💰',
   'Przychód gotówkowy':'💵','Przychód bankowy':'🏦','Inne przychody':'💰',
@@ -1037,7 +1054,7 @@ const INC_SOURCES = {
 const EXP_CATS_PERSONAL = [
   'Spożywcze','Paliwo','Jedzenie poza domem','Zakupy online','Sport i hobby',
   'Edukacja','Dom i mieszkanie','Zdrowie','Subskrypcje','Kosmetyki',
-  'Telefon/TV/internet','Opłaty bankowe','Transport/parking','Telefon dziecka',
+  'Telefon/TV/internet','Opłaty bankowe','ZUS / podatki','Transport/parking','Telefon dziecka',
   'Spłata długu','Prezenty/różne','Inne'
 ];
 const EXP_CATS_BIZ = ['Koszty firmowe'];
@@ -1206,7 +1223,12 @@ function renderSidebar(){
   document.getElementById('sb-sub').textContent = months.length + ' miesięcy';
 }
 
-function selMonth(m){ curMonth=m; renderSidebar(); renderPage(); }
+function selMonth(m){
+  curMonth=m;
+  applyRecurringExpenses();
+  renderSidebar();
+  renderPage();
+}
 
 function deleteMonth(m){
   const n = data.filter(t=>t.month===m).length;
@@ -1287,7 +1309,7 @@ function txHtml(t){
     <span class="tx-date">${t.date}</span>
     <div class="tx-info">
       <span class="tx-name">${displayName||''}</span>
-      <div class="tx-meta">${srcBadge}${bizBadge}</div>
+      <div class="tx-meta">${srcBadge}${bizBadge}${t.recurringId?'<span class="tx-badge" style="background:var(--purple-bg);color:var(--purple)">🔁 cykliczny</span>':''}</div>
     </div>
     <span class="tx-amt" style="color:${col}">${t.amt>0?'+':''}${fmt(Math.abs(t.amt))}</span>
     <button type="button" class="tx-del" onclick="delTx(${data.indexOf(t)})" title="Usuń wpis">✕</button>
@@ -1302,6 +1324,7 @@ function delTx(idx){
     : ((t.name||t.cat||'transakcję')+' · '+fmt(Math.abs(t.amt)));
   if(!confirm('Usunąć '+label+'?')) return;
   reverseIfDebtPayment(t);
+  skipRecurringMonth(t);
   if(typeof schedEditIdx!=='undefined' && schedEditIdx!=null){
     if(idx===schedEditIdx) schedEditIdx=null;
     else if(idx<schedEditIdx) schedEditIdx--;
@@ -2330,6 +2353,53 @@ function quickTypeChange(){
   const cats = TYPE_CATS[type]||EXP_CATS_PERSONAL;
   const sel = document.getElementById('q-cat');
   sel.innerHTML = cats.map(c=>`<option>${c}</option>`).join('');
+  const recWrap = document.getElementById('q-recurring-wrap');
+  const isInc = ['income','cash-inc','salary','training'].includes(type);
+  if(recWrap) recWrap.style.display = isInc ? 'none' : 'flex';
+  if(isInc){
+    const rec=document.getElementById('q-recurring');
+    if(rec) rec.checked=false;
+  }
+}
+
+function syncQuickMonthFromDate(){
+  const dateEl=document.getElementById('q-date');
+  const monthEl=document.getElementById('q-month');
+  if(!dateEl||!monthEl) return;
+  const raw=dateEl.value.trim();
+  if(!/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(raw)) return;
+  const parsed=parseTxDateFields(raw, monthEl.value);
+  monthEl.value=parsed.month;
+}
+
+function parseTxDateFields(dateStr, monthStr){
+  const raw=String(dateStr||'').trim();
+  const hit=raw.match(/^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?$/);
+  let day=null, monthIndex=null, year=null;
+  if(hit){
+    day=parseInt(hit[1],10);
+    monthIndex=parseInt(hit[2],10)-1;
+    if(hit[3]){
+      year=parseInt(hit[3],10);
+      if(year<100) year+=2000;
+    }
+  }
+  const mp=String(monthStr||curMonth||'').split(' ');
+  const fromLabel=MONTHS_PL.indexOf(mp[0]);
+  const yearFromLabel=parseInt(mp[1],10);
+  if(year==null || isNaN(year)) year = yearFromLabel || new Date().getFullYear();
+  if(monthIndex==null || monthIndex<0 || monthIndex>11) monthIndex = fromLabel>=0 ? fromLabel : new Date().getMonth();
+  if(!day || day<1) day=1;
+  const last=new Date(year, monthIndex+1, 0).getDate();
+  day=Math.min(day, last);
+  const mm=String(monthIndex+1).padStart(2,'0');
+  const dd=String(day).padStart(2,'0');
+  return {
+    day, monthIndex, year,
+    iso: year+'-'+mm+'-'+dd,
+    date: dd+'.'+mm,
+    month: MONTHS_PL[monthIndex]+' '+year
+  };
 }
 
 function doQuickAdd(){
@@ -2337,8 +2407,9 @@ function doQuickAdd(){
   const name = document.getElementById('q-name').value.trim();
   const amtRaw = document.getElementById('q-amt').value.replace(/\s/g,'').replace(',','.');
   const cat = document.getElementById('q-cat').value;
-  const date = document.getElementById('q-date').value.trim() || new Date().toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'}).replace(/\./g,'.').slice(0,5);
-  const month = document.getElementById('q-month').value.trim() || curMonth;
+  const dateRaw = document.getElementById('q-date').value.trim();
+  const monthRaw = document.getElementById('q-month').value.trim() || curMonth;
+  const parsed = parseTxDateFields(dateRaw || new Date().toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'}), monthRaw);
   const statusEl = document.getElementById('q-status');
 
   if(!name||!amtRaw){ statusEl.textContent='Wypełnij nazwę i kwotę.'; statusEl.className='fstatus err'; return; }
@@ -2352,13 +2423,31 @@ function doQuickAdd(){
   if(isInc && amt<0) amt=Math.abs(amt);
 
   const src = isCashType ? 'cash' : 'bank';
-  data.push({ date, name, cat, amt, month, src });
-  save(); curMonth=month; renderSidebar();
+  const recEl = document.getElementById('q-recurring');
+  const makeRecurring = !!(recEl && recEl.checked && !isInc);
+  let recurringId=null;
+  if(makeRecurring){
+    recurringId = upsertRecurringExpense({
+      name, amount: Math.abs(amt), cat, src,
+      cycle: 'monthly', day: parsed.day, startISO: parsed.iso
+    });
+  }
+
+  const tx={ date: parsed.date, iso: parsed.iso, name, cat, amt, month: parsed.month, src, id: Date.now() };
+  if(recurringId) tx.recurringId=recurringId;
+  data.push(tx);
+  save();
+  curMonth=parsed.month;
+  if(makeRecurring) applyRecurringExpenses();
+  renderSidebar();
   document.getElementById('q-name').value='';
   document.getElementById('q-amt').value='';
-  statusEl.textContent=`✓ Dodano: ${name} (${fmt(amt,true)})`;
+  if(recEl) recEl.checked=false;
+  statusEl.textContent=makeRecurring
+    ? `✓ Dodano cykliczny wydatek: ${name} (${fmt(amt,true)}) — będzie wpisywany sam co miesiąc`
+    : `✓ Dodano: ${name} (${fmt(amt,true)})`;
   statusEl.className='fstatus';
-  setTimeout(()=>{ statusEl.textContent=''; },3000);
+  setTimeout(()=>{ statusEl.textContent=''; },4000);
   renderPage();
 }
 
@@ -2378,6 +2467,7 @@ const CAT_KW = {
   'Kosmetyki':['rossmann','douglas','sephora','hebe','drogeria'],
   'Telefon/TV/internet':['canal+','play','plus','orange','t-mobile','upc','netia','vectra','polsat'],
   'Opłaty bankowe':['opłata','prowizja','opłata miesięczna','opłata za prowadzenie'],
+  'ZUS / podatki':['zus','us skarb','urząd skarbowy','pit ','vat ','podatek'],
   'Transport/parking':['parking','sppp','kbu','pkp','bus','uber','bolt','taxi','mzk'],
 };
 
@@ -3085,15 +3175,26 @@ function renderDebts(){
 }
 
 // ═══════════════════════════════════════════════════
-// SUBSKRYPCJE
+// SUBSKRYPCJE / WYDATKI CYKLICZNE
 // ═══════════════════════════════════════════════════
 function getSubs(){ return JSON.parse(localStorage.getItem('budzet_subs')||'[]'); }
 function saveSubsData(s){ localStorage.setItem('budzet_subs', JSON.stringify(s)); }
+
+function fillSubCatSelect(selected){
+  const sel=document.getElementById('sub-cat');
+  if(!sel) return;
+  const cats=EXP_CATS_PERSONAL.slice();
+  if(selected && !cats.includes(selected)) cats.unshift(selected);
+  sel.innerHTML=cats.map(c=>`<option${c===(selected||'ZUS / podatki')?' selected':''}>${c}</option>`).join('');
+}
 
 function showAddSub(){
   document.getElementById('sub-edit-id').value='';
   ['sub-name','sub-amount','sub-next-date'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('sub-cycle').value='monthly';
+  document.getElementById('sub-src').value='bank';
+  document.getElementById('sub-autopost').checked=true;
+  fillSubCatSelect('Subskrypcje');
   document.getElementById('sub-form-modal').style.display='block';
 }
 function closeSubForm(){ document.getElementById('sub-form-modal').style.display='none'; }
@@ -3104,9 +3205,119 @@ function editSub(id){
   document.getElementById('sub-edit-id').value=id;
   document.getElementById('sub-name').value=s.name;
   document.getElementById('sub-amount').value=s.amount;
-  document.getElementById('sub-cycle').value=s.cycle;
-  document.getElementById('sub-next-date').value=s.nextDate||'';
+  document.getElementById('sub-cycle').value=s.cycle||'monthly';
+  document.getElementById('sub-next-date').value=s.nextDate||s.startISO||'';
+  document.getElementById('sub-src').value=s.src||'bank';
+  document.getElementById('sub-autopost').checked=s.autoPost!==false && !!s.autoPost;
+  fillSubCatSelect(s.cat||'Inne');
   document.getElementById('sub-form-modal').style.display='block';
+}
+
+function upsertRecurringExpense(rec){
+  const name=String(rec.name||'').trim();
+  if(!name) return null;
+  const amount=Math.abs(Number(rec.amount)||0);
+  const subs=getSubs();
+  const existing=subs.find(s=>s.autoPost && String(s.name).trim().toLowerCase()===name.toLowerCase());
+  const startISO=rec.startISO || rec.nextDate || toISODate(new Date());
+  const parsed=parseTxDateFields(isoToTxDate(startISO), isoToMonthLabel(startISO));
+  const sub={
+    id: existing ? existing.id : Date.now(),
+    name,
+    amount,
+    cycle: rec.cycle||'monthly',
+    nextDate: startISO,
+    startISO,
+    day: rec.day || parsed.day,
+    cat: rec.cat || (existing && existing.cat) || 'Inne',
+    src: rec.src || (existing && existing.src) || 'bank',
+    autoPost: true,
+    active: existing ? existing.active!==false : true,
+    skipped: existing && Array.isArray(existing.skipped) ? existing.skipped : []
+  };
+  if(existing){
+    saveSubsData(subs.map(s=>String(s.id)===String(sub.id)?Object.assign({},s,sub):s));
+  } else {
+    subs.push(sub);
+    saveSubsData(subs);
+  }
+  return sub.id;
+}
+
+function skipRecurringMonth(t){
+  if(!t || t.recurringId==null || !t.month) return;
+  const subs=getSubs();
+  const idx=subs.findIndex(s=>String(s.id)===String(t.recurringId));
+  if(idx<0) return;
+  const skipped=Array.isArray(subs[idx].skipped)?subs[idx].skipped.slice():[];
+  if(!skipped.includes(t.month)) skipped.push(t.month);
+  subs[idx]=Object.assign({}, subs[idx], {skipped});
+  saveSubsData(subs);
+}
+
+function monthHasRecurringExpense(sub, monthLabel){
+  if((sub.skipped||[]).includes(monthLabel)) return true;
+  const want=String(sub.name||'').trim().toLowerCase();
+  return data.some(t=>t.month===monthLabel && t.amt<0 && (
+    String(t.recurringId)===String(sub.id) ||
+    String(t.name||'').trim().toLowerCase()===want
+  ));
+}
+
+function recurringEndMonth(){
+  const now=new Date();
+  let endY=now.getFullYear(), endM=now.getMonth();
+  const mp=String(curMonth||'').split(' ');
+  const mi=MONTHS_PL.indexOf(mp[0]);
+  const y=parseInt(mp[1],10);
+  if(mi>=0 && y){
+    if(y>endY || (y===endY && mi>endM)){ endY=y; endM=mi; }
+  }
+  return {year:endY, month:endM};
+}
+
+function applyRecurringExpenses(){
+  const subs=getSubs().filter(s=>s.active!==false && s.autoPost);
+  if(!subs.length) return 0;
+  const end=recurringEndMonth();
+  let added=0;
+  subs.forEach(sub=>{
+    const startISO=sub.startISO||sub.nextDate;
+    if(!startISO) return;
+    const start=parseISODate(startISO);
+    if(isNaN(start.getTime())) return;
+    let y=start.getFullYear(), m=start.getMonth();
+    const day=Math.max(1, parseInt(sub.day,10) || start.getDate());
+    let guard=0;
+    while(y<end.year || (y===end.year && m<=end.month)){
+      if(++guard>36) break;
+      if(sub.cycle!=='yearly' || m===start.getMonth()){
+        const monthLabel=MONTHS_PL[m]+' '+y;
+        if(!monthHasRecurringExpense(sub, monthLabel)){
+          const last=new Date(y, m+1, 0).getDate();
+          const d=Math.min(day, last);
+          const mm=String(m+1).padStart(2,'0');
+          const dd=String(d).padStart(2,'0');
+          data.push({
+            id: 'rec-'+sub.id+'-'+y+'-'+mm,
+            date: dd+'.'+mm,
+            iso: y+'-'+mm+'-'+dd,
+            name: sub.name,
+            cat: sub.cat||'Inne',
+            amt: -Math.abs(Number(sub.amount)||0),
+            month: monthLabel,
+            src: sub.src||'bank',
+            recurringId: sub.id
+          });
+          added++;
+        }
+      }
+      m++;
+      if(m>11){ m=0; y++; }
+    }
+  });
+  if(added) save();
+  return added;
 }
 
 function saveSubForm(){
@@ -3114,18 +3325,39 @@ function saveSubForm(){
   const amount=parseFloat(document.getElementById('sub-amount').value)||0;
   if(!name || amount<=0){ alert('Podaj nazwę i kwotę subskrypcji.'); return; }
   const editId=document.getElementById('sub-edit-id').value;
-  const sub={ id: editId?parseInt(editId):Date.now(), name, amount, cycle: document.getElementById('sub-cycle').value, nextDate: document.getElementById('sub-next-date').value, active: true };
+  const nextDate=document.getElementById('sub-next-date').value || (!editId ? toISODate(new Date()) : '');
+  const autoPost=document.getElementById('sub-autopost').checked;
+  const parsed=nextDate ? parseTxDateFields(isoToTxDate(nextDate), isoToMonthLabel(nextDate)) : parseTxDateFields('', curMonth);
+  const sub={
+    id: editId?parseInt(editId):Date.now(),
+    name,
+    amount,
+    cycle: document.getElementById('sub-cycle').value,
+    nextDate: nextDate || parsed.iso,
+    startISO: nextDate || parsed.iso,
+    day: parsed.day,
+    cat: document.getElementById('sub-cat').value || 'Inne',
+    src: document.getElementById('sub-src').value || 'bank',
+    autoPost,
+    active: true
+  };
   let subs=getSubs();
-  const existing = editId ? subs.find(s=>s.id===sub.id) : null;
-  if(existing) sub.active = existing.active;
-  if(editId){ subs=subs.map(s=>s.id===sub.id?sub:s); } else { subs.push(sub); }
+  const existing = editId ? subs.find(s=>String(s.id)===String(sub.id)) : null;
+  if(existing){
+    sub.active = existing.active;
+    sub.skipped = existing.skipped||[];
+    if(!nextDate && existing.startISO) sub.startISO = existing.startISO;
+  }
+  if(editId){ subs=subs.map(s=>String(s.id)===String(sub.id)?sub:s); } else { subs.push(sub); }
   saveSubsData(subs);
   closeSubForm();
+  applyRecurringExpenses();
+  renderSidebar();
   renderSubs();
 }
 
-function deleteSub(id){ if(!confirm('Usunąć tę subskrypcję z listy?')) return; saveSubsData(getSubs().filter(s=>s.id!==id)); renderSubs(); }
-function toggleSubActive(id){ const subs=getSubs().map(s=> s.id===id?{...s,active:!s.active}:s); saveSubsData(subs); renderSubs(); }
+function deleteSub(id){ if(!confirm('Usunąć tę subskrypcję z listy? Wcześniejsze wydatki zostaną.')) return; saveSubsData(getSubs().filter(s=>String(s.id)!==String(id))); renderSubs(); }
+function toggleSubActive(id){ const subs=getSubs().map(s=> String(s.id)===String(id)?{...s,active:!s.active}:s); saveSubsData(subs); if(getSubs().find(s=>String(s.id)===String(id) && s.active!==false && s.autoPost)) applyRecurringExpenses(); renderSidebar(); renderSubs(); }
 
 function renderSubs(){
   const subs=getSubs();
@@ -3152,16 +3384,17 @@ function renderSubs(){
 
   document.getElementById('subs-list').innerHTML = subs.length ? subs.slice().sort((a,b)=>b.amount-a.amount).map(s=>{
     const monthlyEq = s.cycle==='monthly'?s.amount:s.amount/12;
+    const auto = s.autoPost ? ' · <span style="color:var(--purple)">auto wydatek</span>' : '';
     return `<div class="cat-row" style="${s.active===false?'opacity:.45':''}">
-      <div class="ci" style="background:var(--blue-bg)">🔁</div>
+      <div class="ci" style="background:var(--blue-bg)">${s.autoPost?'📅':'🔁'}</div>
       <span class="cn">${s.name}${s.active===false?' <span style="font-size:10px;color:var(--red)">(do anulowania)</span>':''}</span>
-      <div style="flex:1;margin:0 10px;font-size:11px;color:var(--text3)">${s.cycle==='monthly'?'miesięcznie':'rocznie'}${s.nextDate?' · najbliższa: '+new Date(s.nextDate).toLocaleDateString('pl-PL'):''}</div>
+      <div style="flex:1;margin:0 10px;font-size:11px;color:var(--text3)">${s.cycle==='monthly'?'miesięcznie':'rocznie'}${s.nextDate?' · od '+parseISODate(s.nextDate).toLocaleDateString('pl-PL'):''}${auto}${s.cat?' · '+s.cat:''}</div>
       <span style="font-size:13px;font-weight:600;min-width:100px;text-align:right">${fmt(s.amount)} <span style="font-size:10px;color:var(--text3);font-weight:400">(~${fmt(monthlyEq)}/mc)</span></span>
       <button onclick="toggleSubActive(${s.id})" title="${s.active===false?'Przywróć':'Oznacz do anulowania'}" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;margin-left:8px">${s.active===false?'↺':'🚫'}</button>
       <button onclick="editSub(${s.id})" title="Edytuj" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px">✏️</button>
       <button onclick="deleteSub(${s.id})" title="Usuń" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px">✕</button>
     </div>`;
-  }).join('') : '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Brak zapisanych subskrypcji.</div>';
+  }).join('') : '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Brak zapisanych subskrypcji. Dodaj ZUS albo inną stałą opłatę — zaznacz „wpisuj automatycznie”.</div>';
 }
 
 // ═══════════════════════════════════════════════════
@@ -3441,6 +3674,7 @@ function toggleTheme(){
   document.getElementById('q-month').value=curMonth;
   document.getElementById('imp-month').value='';
   quickTypeChange();
+  applyRecurringExpenses();
   renderSidebar();
   renderDash();
 })();
