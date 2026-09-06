@@ -138,6 +138,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .factions{display:flex;gap:8px;align-items:center;margin-top:14px}
 .btn-p{padding:8px 20px;border-radius:var(--rsm);background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity .15s}
 .btn-p:hover{opacity:.85}
+.btn-p:disabled{opacity:.55;cursor:default}
+.btn-p:disabled:hover{opacity:.55}
 .btn-s{padding:8px 18px;border-radius:var(--rsm);background:none;color:var(--text2);border:1px solid var(--border2);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s}
 .btn-s:hover{background:var(--bg2)}
 .btn-danger{padding:6px 14px;border-radius:var(--rsm);background:none;color:var(--red);border:1px solid var(--red);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s}
@@ -177,6 +179,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .cal-cell.now{box-shadow:inset 0 2px 0 var(--red)}
 .cal-cell.drop{background:var(--green-bg);outline:2px dashed var(--accent);outline-offset:-2px}
 .cal-slot{border-radius:5px;padding:3px 16px 3px 5px;font-size:10.5px;line-height:1.25;margin-bottom:2px;position:relative;overflow:hidden;cursor:grab;user-select:none}
+.cal-slot.planned{opacity:.82;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+.cal-chip.planned{opacity:.8}
+.cal-h .cal-earn.plan{color:var(--text2);font-weight:500}
+.cal-h .cal-ok{font-size:9px;color:var(--green);margin-top:2px;font-weight:600}
 .cal-slot.editing{outline:2px solid var(--accent);outline-offset:1px}
 .cal-slot .cs-name{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-slot .cs-amt{font-family:'DM Mono',monospace;font-size:10px;opacity:.9}
@@ -428,14 +434,14 @@ body.sched-dragging{touch-action:none;user-select:none}
 
 <!-- SCHEDULE / GRAFIK ZAROBKÓW -->
 <div class="page" id="page-schedule">
-  <div class="ph"><div class="ph-left"><h2>Grafik pracy</h2><p>Przeciągnij osobę na inny dzień — skopiuje się z kwotą. Możesz też skopiować cały tydzień</p></div>
+  <div class="ph"><div class="ph-left"><h2>Grafik pracy</h2><p>To plan — kto ma przyjść. Do zarobków wejdzie dopiero po zatwierdzeniu dnia (gdy wiesz, kto był)</p></div>
     <button class="btn-s" onclick="goSchedToday()" style="flex-shrink:0">Dzisiaj</button>
   </div>
 
   <div class="mg mg-3" style="margin-bottom:14px">
-    <div class="mc"><div class="ml">Dziś / wybrany dzień</div><div class="mv g" id="sched-sum-day">—</div><div class="ms" id="sched-sum-day-n"></div></div>
-    <div class="mc"><div class="ml">Ten tydzień</div><div class="mv g" id="sched-sum-week">—</div><div class="ms" id="sched-sum-week-n"></div></div>
-    <div class="mc"><div class="ml">Ten miesiąc</div><div class="mv g" id="sched-sum-month">—</div><div class="ms" id="sched-sum-month-n"></div></div>
+    <div class="mc"><div class="ml">Plan dnia</div><div class="mv g" id="sched-sum-day">—</div><div class="ms" id="sched-sum-day-n"></div></div>
+    <div class="mc"><div class="ml">Plan tygodnia</div><div class="mv g" id="sched-sum-week">—</div><div class="ms" id="sched-sum-week-n"></div></div>
+    <div class="mc"><div class="ml">Plan miesiąca</div><div class="mv g" id="sched-sum-month">—</div><div class="ms" id="sched-sum-month-n"></div></div>
   </div>
 
   <div class="card card-p" style="margin-bottom:14px">
@@ -450,6 +456,7 @@ body.sched-dragging{touch-action:none;user-select:none}
     <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px">
       <button class="btn-s" onclick="copySchedNextWeek()">Kopiuj na następny tydzień</button>
       <button class="btn-s" onclick="copySchedToMonthEnd()">Kopiuj do końca miesiąca</button>
+      <button class="btn-p" id="sched-confirm-day-btn" onclick="confirmSchedDay()">Zatwierdź dzień → zarobki</button>
     </div>
   </div>
 
@@ -1180,11 +1187,11 @@ function fmt(v, sign=false){
   return s;
 }
 
-function isIncome(t){ return t.amt > 0; }
+function isIncome(t){ return t && t.amt>0 && t.planned!==true; }
 function isExpense(t){ return t.amt < 0; }
 function isCash(t){ return t.src === 'cash'; }
 function cashIncomeOf(t){
-  if(!t || !(t.amt>0)) return 0;
+  if(!t || !(t.amt>0) || t.planned===true) return 0;
   if(t.src==='split') return Math.max(0, Number(t.cashAmt)||0);
   return t.src==='cash' ? t.amt : 0;
 }
@@ -1295,7 +1302,7 @@ function renderPage(){
 // HELPERS
 // ═══════════════════════════════════════════════════
 function mdata(month){
-  const tx = data.filter(t=>t.month===month);
+  const tx = data.filter(t=>t.month===month && t.planned!==true);
   const inc = tx.filter(isIncome).reduce((s,t)=>s+t.amt,0);
   const exp = Math.abs(tx.filter(isExpense).reduce((s,t)=>s+t.amt,0));
   const cashInc = tx.filter(isIncome).reduce((s,t)=>s+cashIncomeOf(t),0);
@@ -1328,7 +1335,7 @@ function txHtml(t){
     <span class="tx-date">${t.date}</span>
     <div class="tx-info">
       <span class="tx-name">${displayName||''}</span>
-      <div class="tx-meta">${srcBadge}${bizBadge}${t.recurringId?'<span class="tx-badge" style="background:var(--purple-bg);color:var(--purple)">🔁 cykliczny</span>':''}</div>
+      <div class="tx-meta">${srcBadge}${bizBadge}${t.recurringId?'<span class="tx-badge" style="background:var(--purple-bg);color:var(--purple)">🔁 cykliczny</span>':''}${t.planned?'<span class="tx-badge" style="background:var(--amber-bg);color:var(--amber)">plan grafiku</span>':''}</div>
     </div>
     <span class="tx-amt" style="color:${col}">${t.amt>0?'+':''}${fmt(Math.abs(t.amt))}</span>
     <button type="button" class="tx-del" onclick="delTx(${data.indexOf(t)})" title="Usuń wpis">✕</button>
@@ -1440,7 +1447,7 @@ function renderDash(){
       <span class="ca" style="color:var(--red)">-${fmt(amt)}</span>
     </div>`).join('');
 
-  const recent = [...tx].sort((a,b)=>{
+  const recent = [...tx].filter(t=>t.planned!==true).sort((a,b)=>{
     const[da,ma]=a.date.split('.').map(Number);const[db,mb]=b.date.split('.').map(Number);
     return mb-ma||db-da;
   }).slice(0,8);
@@ -1497,8 +1504,8 @@ function renderIncome(){
 
 // ═══════════════════════════════════════════════════
 // GRAFIK ZAROBKÓW (treningi personalne)
-// Jedno źródło prawdy: wpis = transakcja w `data` z cat "Plan treningowy".
-// Dashboard, Przychody i Transakcje czytają to samo — bez drugiej kopii.
+// Grafik = PLAN (kto ma przyjść). Do przychodów dopiero po „Zatwierdź dzień”.
+// Zatwierdzony trening to zwykła transakcja cat "Plan treningowy" bez planned:true.
 // ═══════════════════════════════════════════════════
 const DAYS_PL = ['niedziela','poniedziałek','wtorek','środa','czwartek','piątek','sobota'];
 const MONTHS_PL_GEN = ['stycznia','lutego','marca','kwietnia','maja','czerwca','lipca','sierpnia','września','października','listopada','grudnia'];
@@ -1537,7 +1544,19 @@ function txToISO(t){
   if(!dd||!mm||mi<0||!year) return '';
   return year+'-'+mm+'-'+dd;
 }
-function isTrainingIncome(t){ return t.cat==='Plan treningowy' && t.amt>0; }
+function isTrainingIncome(t){ return t && t.cat==='Plan treningowy' && t.amt>0; }
+function isTrainingPlanned(t){ return isTrainingIncome(t) && t.planned===true; }
+function migrateSchedulePlanned(){
+  const today=toISODate(new Date());
+  let n=0;
+  data.forEach(t=>{
+    if(!isTrainingIncome(t) || t.planned===true || t.planned===false) return;
+    const iso=txToISO(t);
+    if(iso && iso>=today){ t.planned=true; n++; }
+  });
+  if(n) save();
+  return n;
+}
 function scheduleClientName(t){
   return String(t.name||'').replace(/^Plan treningowy\s*[—–-]\s*/,'');
 }
@@ -1750,7 +1769,8 @@ function cloneScheduleTx(t, iso, time){
     amt: t.amt,
     month: isoToMonthLabel(iso),
     src: t.src||'cash',
-    withGuest: !!t.withGuest
+    withGuest: !!t.withGuest,
+    planned: true
   };
   if(t.src==='split'){
     c.cashAmt=Number(t.cashAmt)||0;
@@ -2021,7 +2041,8 @@ function addScheduleEntry(){
     amt,
     month: isoToMonthLabel(iso),
     src: schedPay==='split'?'split':(schedPay==='bank'?'bank':'cash'),
-    withGuest: schedGuest || schedPay==='split'
+    withGuest: schedGuest || schedPay==='split',
+    planned: true
   };
   if(schedPay==='split'){
     const cash=parseFloat(String((document.getElementById('sched-amt-cash')||{}).value||'').replace(',','.'));
@@ -2042,6 +2063,7 @@ function addScheduleEntry(){
   }
   if(editing){
     rec.id=data[schedEditIdx].id || rec.id;
+    rec.planned=data[schedEditIdx].planned===true;
     data[schedEditIdx]=rec;
   } else {
     data.push(rec);
@@ -2057,7 +2079,24 @@ function addScheduleEntry(){
   const bankEl=document.getElementById('sched-amt-bank');
   if(cashEl) cashEl.value='';
   if(bankEl) bankEl.value='';
-  setSchedStatus((wasEdit?'✓ Zmieniono: ':'✓ Dodano: ')+time+' '+client+' · '+fmt(rec.amt)+(rec.src==='split'?' · 💵'+fmt(rec.cashAmt)+' + 🏦'+fmt(rec.bankAmt):''));
+  setSchedStatus((wasEdit?'✓ Zmieniono: ':'✓ Dodano do planu (jeszcze nie w zarobkach): ')+time+' '+client+' · '+fmt(rec.amt)+(rec.src==='split'?' · 💵'+fmt(rec.cashAmt)+' + 🏦'+fmt(rec.bankAmt):''));
+  renderSidebar();
+  renderSchedule();
+}
+
+function confirmSchedDay(){
+  const iso=(document.getElementById('sched-date')||{}).value || schedDate;
+  if(!iso){ setSchedStatus('Wybierz dzień.', true); return; }
+  const pending=trainingsInRange(iso,iso).filter(isTrainingPlanned);
+  if(!pending.length){ setSchedStatus('Nie ma zaplanowanych treningów do zatwierdzenia.'); return; }
+  const total=sumTrainings(pending);
+  const dayLabel=formatDayLabel(iso);
+  if(!confirm('Zatwierdzić '+treningLabel(pending.length)+' z dnia '+dayLabel+' na '+fmt(total)+'?\n\nTylko potwierdzone treningi trafią do przychodów. Usuń wcześniej osoby, które nie przyszły.')) return;
+  pending.forEach(t=>{ t.planned=false; });
+  save();
+  curMonth=isoToMonthLabel(iso);
+  schedDate=iso;
+  setSchedStatus('✓ Zatwierdzono dzień — '+treningLabel(pending.length)+' ('+fmt(total)+') w przychodach.');
   renderSidebar();
   renderSchedule();
 }
@@ -2069,8 +2108,11 @@ function deleteEditedSchedule(){
 
 function deleteScheduleTx(idx){
   if(idx==null || !data[idx] || !isTrainingIncome(data[idx])) return;
-  const label=scheduleClientName(data[idx])+' · '+fmt(data[idx].amt);
-  if(!confirm('Usunąć '+label+' z grafiku i z transakcji?')) return;
+  const t=data[idx];
+  const label=scheduleClientName(t)+' · '+fmt(t.amt);
+  if(!confirm(isTrainingPlanned(t)
+    ? 'Usunąć '+label+' z grafiku?'
+    : 'Usunąć '+label+' z grafiku i z transakcji?')) return;
   const clearingEdit=schedEditIdx===idx;
   if(schedEditIdx!=null){
     if(idx===schedEditIdx) schedEditIdx=null;
@@ -2123,12 +2165,31 @@ function renderSchedule(){
   const weekList=trainingsInRange(weekR.from, weekR.to);
   const monthList=trainingsInRange(monthR.from, monthR.to);
 
+  const dayEarned=sumTrainings(dayList.filter(t=>!isTrainingPlanned(t)));
+  const weekEarned=sumTrainings(weekList.filter(t=>!isTrainingPlanned(t)));
+  const monthEarned=sumTrainings(monthList.filter(t=>!isTrainingPlanned(t)));
   document.getElementById('sched-sum-day').textContent=fmt(sumTrainings(dayList));
-  document.getElementById('sched-sum-day-n').textContent=treningLabel(dayList.length)+' · '+formatDayLabel(schedDate);
+  document.getElementById('sched-sum-day-n').textContent=treningLabel(dayList.length)+' · '+formatDayLabel(schedDate)+' · w przychodach: '+fmt(dayEarned);
   document.getElementById('sched-sum-week').textContent=fmt(sumTrainings(weekList));
-  document.getElementById('sched-sum-week-n').textContent=treningLabel(weekList.length)+' · '+weekR.label;
+  document.getElementById('sched-sum-week-n').textContent=treningLabel(weekList.length)+' · '+weekR.label+' · w przychodach: '+fmt(weekEarned);
   document.getElementById('sched-sum-month').textContent=fmt(sumTrainings(monthList));
-  document.getElementById('sched-sum-month-n').textContent=treningLabel(monthList.length)+' · '+monthR.label;
+  document.getElementById('sched-sum-month-n').textContent=treningLabel(monthList.length)+' · '+monthR.label+' · w przychodach: '+fmt(monthEarned);
+  const confirmBtn=document.getElementById('sched-confirm-day-btn');
+  const pendingDay=dayList.filter(isTrainingPlanned);
+  if(confirmBtn){
+    if(pendingDay.length){
+      confirmBtn.hidden=false;
+      confirmBtn.disabled=false;
+      confirmBtn.textContent='Zatwierdź dzień → zarobki';
+    }else if(dayList.length){
+      confirmBtn.hidden=false;
+      confirmBtn.disabled=true;
+      confirmBtn.textContent='Dzień już w zarobkach';
+    }else{
+      confirmBtn.hidden=true;
+      confirmBtn.disabled=true;
+    }
+  }
 
   const weekStart=startOfISOWeek(parseISODate(schedDate));
   const weekDays=[];
@@ -2165,7 +2226,7 @@ function renderSchedule(){
     untimedEl.style.display='block';
     untimedEl.innerHTML = 'Bez godziny — przeciągnij na kratkę: '+untimed.map(t=>{
       const idx=data.indexOf(t);
-      return `<span class="cal-chip${idx===schedEditIdx?' editing':''}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})">${scheduleClientName(t)} ${fmt(t.amt)} <button class="tx-del" style="opacity:1;display:inline" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button></span>`;
+      return `<span class="cal-chip${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})">${scheduleClientName(t)} ${fmt(t.amt)} <button class="tx-del" style="opacity:1;display:inline" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button></span>`;
     }).join(' ');
   } else { untimedEl.style.display='none'; untimedEl.innerHTML=''; }
 
@@ -2173,11 +2234,14 @@ function renderSchedule(){
   let html='<div class="cal-h"></div>';
   weekDays.forEach((iso,i)=>{
     const d=parseISODate(iso);
-    const dayEarn=sumTrainings(trainingsInRange(iso,iso));
+    const dayItems=trainingsInRange(iso,iso);
+    const dayEarn=sumTrainings(dayItems);
+    const dayPending=dayItems.some(isTrainingPlanned);
+    const dayConfirmed=dayItems.length && !dayPending;
     html+=`<div class="cal-h${iso===today?' today':''}${iso===schedDate?' sel':''}" onclick="selectSchedDay('${iso}')">
-      <div class="cal-dayn">${DAY_SHORT[i]}</div>
+      <div class="cal-dayn">${DAY_SHORT[i]}${dayConfirmed?' <span class="cal-ok">✓</span>':''}</div>
       <div class="cal-num">${d.getDate()}</div>
-      <div class="cal-earn">${dayEarn?fmt(dayEarn):'—'}</div>
+      <div class="cal-earn${dayPending?' plan':''}">${dayEarn?fmt(dayEarn):'—'}</div>
     </div>`;
   });
   SCHED_HOURS.forEach(h=>{
@@ -2188,7 +2252,7 @@ function renderSchedule(){
         const idx=data.indexOf(t);
         const col=clientColor(scheduleClientName(t));
         const nm=scheduleClientName(t);
-        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="Kliknij, żeby edytować · przeciągnij, żeby skopiować">
+        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="Kliknij, żeby edytować · przeciągnij, żeby skopiować">
           <button class="cs-del" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
           <span class="cs-name">${hourLabel(h)} ${nm}</span>
           <span class="cs-amt">${fmt(t.amt)} · ${schedPayHint(t)}</span>
@@ -2254,7 +2318,7 @@ function renderTx(){
 
   document.getElementById('tx-sub').textContent = curMonth;
 
-  const txM = data.filter(t=>t.month===curMonth);
+  const txM = data.filter(t=>t.month===curMonth && t.planned!==true);
   // Fill filters
   const cats = [...new Set(txM.map(t=>t.cat))].sort();
   const cf=document.getElementById('tx-cat');
@@ -4037,6 +4101,7 @@ function toggleTheme(){
   document.getElementById('imp-month').value='';
   quickTypeChange();
   bindImportDrop();
+  migrateSchedulePlanned();
   applyRecurringExpenses();
   renderSidebar();
   renderDash();
