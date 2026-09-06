@@ -835,8 +835,8 @@ body.sched-dragging{touch-action:none;user-select:none}
   <div class="card form-card" style="margin-bottom:16px">
     <div class="sec-lbl">📄 Import wyciągu Santander PDF</div>
     <div class="tip">
-      <strong>Jak importować:</strong> Otwórz PDF wyciągu w Chrome → <strong>Ctrl+A</strong> → <strong>Ctrl+C</strong> → wklej poniżej. Miesiąc zostanie wykryty automatycznie.<br>
-      Obsługuje też historię z aplikacji ING, PKO, Revolut (kopiuj tekst z ekranu).
+      <strong>Jak importować:</strong> w PDF zaznacz tekst → <strong>Ctrl+C</strong> (Mac: <strong>Cmd+C</strong>) → kliknij pole poniżej → <strong>Ctrl+V</strong> albo przycisk <strong>Wklej ze schowka</strong>.<br>
+      Przeciąganie z okna PDF często nie działa — wtedy wklej. Możesz też upuścić plik <strong>.txt</strong>. Miesiąc wykryje się sam (ING, PKO, Revolut też).
     </div>
     <div class="frow f1">
       <div class="fg"><label>Miesiąc (auto-wykrywany lub wpisz ręcznie)</label>
@@ -851,8 +851,8 @@ body.sched-dragging{touch-action:none;user-select:none}
       </div>
     </div>
     <div class="factions" style="margin-top:8px;margin-bottom:10px">
-      <button type="button" class="btn-s" onclick="pasteImportClipboard()">Wklej ze schowka</button>
-      <label class="btn-s" style="margin:0;cursor:pointer">Wybierz plik
+      <button type="button" class="btn-p" onclick="pasteImportClipboard()">Wklej ze schowka</button>
+      <label class="btn-s" style="margin:0;cursor:pointer">Wybierz plik .txt
         <input id="imp-file" type="file" accept=".txt,.csv,text/plain" hidden onchange="loadImportFile(this)">
       </label>
     </div>
@@ -2480,41 +2480,107 @@ function doQuickAdd(){
   renderPage();
 }
 
+function htmlToPlain(html){
+  const d=document.createElement('div');
+  d.innerHTML=String(html||'');
+  return String(d.innerText||d.textContent||'').trim();
+}
+function textFromTransfer(transfer){
+  if(!transfer) return '';
+  let text='';
+  try{ text=(transfer.getData('text/plain')||transfer.getData('text')||'').trim(); }catch(e){}
+  if(!text){
+    try{ text=htmlToPlain(transfer.getData('text/html')||''); }catch(e){}
+  }
+  return text;
+}
+function looksLikeBankStatement(text){
+  const t=String(text||'');
+  if(t.length<50) return false;
+  const dates=(t.match(/\d{1,2}[./-]\d{2}(?:[./-]\d{2,4})?/g)||[]).length;
+  const amts=(t.match(/\d{1,3}(?:\s?\d{3})*[,.]\d{2}/g)||[]).length;
+  return dates>=2 || amts>=3 || /santander|wyci[aą]g|historia operacj|revolut|ing bank|pko bp/i.test(t);
+}
+function setImportText(text, note){
+  const ta=document.getElementById('imp-text');
+  const st=document.getElementById('imp-status');
+  if(!ta) return false;
+  ta.value=String(text||'');
+  try{ ta.focus(); }catch(e){}
+  if(st){ st.textContent=note||('✓ Wstawiono '+ta.value.length+' znaków'); st.className='fstatus'; }
+  return true;
+}
+
 function bindImportDrop(){
+  if(bindImportDrop.ok) return;
+  bindImportDrop.ok=true;
   const box=document.getElementById('imp-drop');
   const ta=document.getElementById('imp-text');
-  if(!box||!ta||bindImportDrop.ok) return;
-  bindImportDrop.ok=true;
-  const stop=e=>{ e.preventDefault(); e.stopPropagation(); };
-  box.addEventListener('dragenter', e=>{ stop(e); box.classList.add('over'); });
-  box.addEventListener('dragover', e=>{ stop(e); box.classList.add('over'); });
-  box.addEventListener('dragleave', e=>{
-    if(e.target===box) box.classList.remove('over');
-  });
-  box.addEventListener('drop', e=>{
-    stop(e);
-    box.classList.remove('over');
-    const dt=e.dataTransfer;
-    if(!dt) return;
-    const text=(dt.getData('text/plain')||dt.getData('text')||'').trim();
+  const page=document.getElementById('page-add');
+  if(!ta) return;
+
+  function applyDrop(transfer){
+    const text=textFromTransfer(transfer);
     if(text){
-      ta.value=text;
-      const st=document.getElementById('imp-status');
-      if(st){ st.textContent='✓ Upuśćono tekst ('+text.length+' znaków)'; st.className='fstatus'; }
+      setImportText(text, '✓ Upuśćono tekst ('+text.length+' znaków)');
+      return true;
+    }
+    const f=transfer && transfer.files && transfer.files[0];
+    if(f){ readImportFile(f); return true; }
+    return false;
+  }
+
+  const dragOver=e=>{
+    if(curPage!=='add') return;
+    const types=[...((e.dataTransfer&&e.dataTransfer.types)||[])];
+    if(!types.length || types.includes('Files') || types.includes('text/plain') || types.includes('text/html') || types.includes('Text')){
+      e.preventDefault();
+      if(e.dataTransfer) e.dataTransfer.dropEffect='copy';
+      if(box) box.classList.add('over');
+    }
+  };
+  const dragLeave=e=>{
+    if(box && (e.target===box || e.target===page)) box.classList.remove('over');
+  };
+  const dropped=e=>{
+    if(curPage!=='add') return;
+    if(!e.dataTransfer) return;
+    if(applyDrop(e.dataTransfer)){
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if(box) box.classList.remove('over');
+  };
+
+  [page, box, ta].forEach(el=>{
+    if(!el) return;
+    el.addEventListener('dragenter', dragOver);
+    el.addEventListener('dragover', dragOver);
+    el.addEventListener('dragleave', dragLeave);
+    el.addEventListener('drop', dropped);
+  });
+  document.addEventListener('dragover', dragOver);
+  document.addEventListener('drop', dropped);
+
+  document.addEventListener('paste', e=>{
+    if(curPage!=='add') return;
+    const text=textFromTransfer(e.clipboardData);
+    const f=e.clipboardData && e.clipboardData.files && e.clipboardData.files[0];
+    if(!text && f){
+      e.preventDefault();
+      readImportFile(f);
       return;
     }
-    if(dt.files && dt.files[0]) readImportFile(dt.files[0]);
-  });
-  ta.addEventListener('paste', e=>{
-    const cd=e.clipboardData;
-    if(!cd) return;
-    const files=[...cd.files||[]];
-    if(files[0] && files[0].type && !files[0].type.startsWith('text')) return;
-    if(files[0] && !cd.getData('text/plain')){
-      e.preventDefault();
-      readImportFile(files[0]);
-    }
-  });
+    if(!text) return;
+    const tgt=e.target;
+    const id=tgt && tgt.id;
+    const typingShort = (id==='q-name'||id==='q-amt'||id==='q-date'||id==='q-month'||id==='imp-month') && !looksLikeBankStatement(text);
+    if(typingShort) return;
+    e.preventDefault();
+    setImportText(text, '✓ Wklejono '+text.length+' znaków');
+  }, true);
+
+  if(box) box.addEventListener('click', ()=>{ ta.focus(); });
 }
 
 async function pasteImportClipboard(){
