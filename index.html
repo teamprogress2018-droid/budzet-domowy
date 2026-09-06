@@ -129,6 +129,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .fg label{display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
 .fg input,.fg select,.fg textarea{width:100%;padding:8px 11px;border:1px solid var(--border2);border-radius:var(--rsm);background:var(--bg2);color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border .15s}
 .fg textarea{resize:vertical;min-height:90px;font-family:'DM Mono',monospace;font-size:11.5px;line-height:1.6}
+.imp-drop{border:1.5px dashed var(--border2);border-radius:var(--rsm);background:var(--bg2);transition:border-color .15s,background .15s}
+.imp-drop.over{border-color:var(--accent);background:var(--green-bg)}
+.imp-drop textarea{min-height:170px;border:none;background:transparent;display:block}
+.imp-drop textarea:focus{background:transparent}
 .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--accent);background:var(--card)}
 .fg-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .factions{display:flex;gap:8px;align-items:center;margin-top:14px}
@@ -840,9 +844,17 @@ body.sched-dragging{touch-action:none;user-select:none}
       </div>
     </div>
     <div class="frow f1">
-      <div class="fg"><label>Wklej tekst</label>
-        <textarea id="imp-text" placeholder="Wklej tutaj skopiowany tekst z wyciągu PDF lub historii aplikacji bankowej..."></textarea>
+      <div class="fg"><label>Wklej tekst, upuść plik albo przeciągnij zaznaczenie</label>
+        <div id="imp-drop" class="imp-drop">
+          <textarea id="imp-text" placeholder="Kliknij tutaj i wklej (Ctrl+V). Możesz też upuścić plik .txt albo przeciągnąć skopiowany tekst."></textarea>
+        </div>
       </div>
+    </div>
+    <div class="factions" style="margin-top:8px;margin-bottom:10px">
+      <button type="button" class="btn-s" onclick="pasteImportClipboard()">Wklej ze schowka</button>
+      <label class="btn-s" style="margin:0;cursor:pointer">Wybierz plik
+        <input id="imp-file" type="file" accept=".txt,.csv,text/plain" hidden onchange="loadImportFile(this)">
+      </label>
     </div>
     <div class="frow">
       <div class="fg"><label>Domyślna kategoria</label>
@@ -1226,6 +1238,7 @@ function renderSidebar(){
 function selMonth(m){
   curMonth=m;
   applyRecurringExpenses();
+  syncAddMonthField();
   renderSidebar();
   renderPage();
 }
@@ -1254,7 +1267,9 @@ function goPage(p){
   const nb = document.querySelectorAll('.nav-btn');
   const idx = pages.indexOf(p);
   if(idx>=0) nb[idx].classList.add('active');
-  curPage=p; renderPage();
+  curPage=p;
+  if(p==='add'){ syncAddMonthField(); bindImportDrop(); }
+  renderPage();
 }
 function renderPage(){
   if(curPage==='dashboard') renderDash();
@@ -2372,6 +2387,18 @@ function syncQuickMonthFromDate(){
   monthEl.value=parsed.month;
 }
 
+function syncAddMonthField(){
+  const monthEl=document.getElementById('q-month');
+  if(!monthEl) return;
+  const dateEl=document.getElementById('q-date');
+  const raw=(dateEl&&dateEl.value||'').trim();
+  if(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(raw)){
+    monthEl.value=parseTxDateFields(raw, curMonth).month;
+  } else if(!monthEl.matches(':focus')){
+    monthEl.value=curMonth;
+  }
+}
+
 function parseTxDateFields(dateStr, monthStr){
   const raw=String(dateStr||'').trim();
   const hit=raw.match(/^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?$/);
@@ -2423,6 +2450,7 @@ function doQuickAdd(){
   if(isInc && amt<0) amt=Math.abs(amt);
 
   const src = isCashType ? 'cash' : 'bank';
+  const viewing=curMonth;
   const recEl = document.getElementById('q-recurring');
   const makeRecurring = !!(recEl && recEl.checked && !isInc);
   let recurringId=null;
@@ -2437,18 +2465,93 @@ function doQuickAdd(){
   if(recurringId) tx.recurringId=recurringId;
   data.push(tx);
   save();
-  curMonth=parsed.month;
   if(makeRecurring) applyRecurringExpenses();
+  if(makeRecurring && data.some(t=>t.month===viewing && String(t.name||'').toLowerCase()===name.toLowerCase())) curMonth=viewing;
+  else curMonth=parsed.month;
   renderSidebar();
   document.getElementById('q-name').value='';
   document.getElementById('q-amt').value='';
   if(recEl) recEl.checked=false;
   statusEl.textContent=makeRecurring
-    ? `✓ Dodano cykliczny wydatek: ${name} (${fmt(amt,true)}) — będzie wpisywany sam co miesiąc`
-    : `✓ Dodano: ${name} (${fmt(amt,true)})`;
+    ? `✓ Dodano cykliczny wydatek: ${name} (${fmt(amt,true)}) — jest w ${curMonth} i wejdzie sam w kolejnych miesiącach`
+    : `✓ Dodano: ${name} (${fmt(amt,true)}) · ${parsed.month}`;
   statusEl.className='fstatus';
   setTimeout(()=>{ statusEl.textContent=''; },4000);
   renderPage();
+}
+
+function bindImportDrop(){
+  const box=document.getElementById('imp-drop');
+  const ta=document.getElementById('imp-text');
+  if(!box||!ta||bindImportDrop.ok) return;
+  bindImportDrop.ok=true;
+  const stop=e=>{ e.preventDefault(); e.stopPropagation(); };
+  box.addEventListener('dragenter', e=>{ stop(e); box.classList.add('over'); });
+  box.addEventListener('dragover', e=>{ stop(e); box.classList.add('over'); });
+  box.addEventListener('dragleave', e=>{
+    if(e.target===box) box.classList.remove('over');
+  });
+  box.addEventListener('drop', e=>{
+    stop(e);
+    box.classList.remove('over');
+    const dt=e.dataTransfer;
+    if(!dt) return;
+    const text=(dt.getData('text/plain')||dt.getData('text')||'').trim();
+    if(text){
+      ta.value=text;
+      const st=document.getElementById('imp-status');
+      if(st){ st.textContent='✓ Upuśćono tekst ('+text.length+' znaków)'; st.className='fstatus'; }
+      return;
+    }
+    if(dt.files && dt.files[0]) readImportFile(dt.files[0]);
+  });
+  ta.addEventListener('paste', e=>{
+    const cd=e.clipboardData;
+    if(!cd) return;
+    const files=[...cd.files||[]];
+    if(files[0] && files[0].type && !files[0].type.startsWith('text')) return;
+    if(files[0] && !cd.getData('text/plain')){
+      e.preventDefault();
+      readImportFile(files[0]);
+    }
+  });
+}
+
+async function pasteImportClipboard(){
+  const st=document.getElementById('imp-status');
+  const ta=document.getElementById('imp-text');
+  try{
+    const text=await navigator.clipboard.readText();
+    if(!String(text||'').trim()){
+      if(st){ st.textContent='Schowek jest pusty — skopiuj tekst z PDF i spróbuj jeszcze raz.'; st.className='fstatus err'; }
+      if(ta) ta.focus();
+      return;
+    }
+    ta.value=text;
+    if(st){ st.textContent='✓ Wklejono '+text.length+' znaków ze schowka'; st.className='fstatus'; }
+  }catch(err){
+    if(ta) ta.focus();
+    if(st){ st.textContent='Kliknij pole i wklej Ctrl+V (przeglądarka zablokowała schowek).'; st.className='fstatus err'; }
+  }
+}
+
+function loadImportFile(input){
+  const f=input.files && input.files[0];
+  input.value='';
+  if(f) readImportFile(f);
+}
+
+function readImportFile(f){
+  const st=document.getElementById('imp-status');
+  const ta=document.getElementById('imp-text');
+  if(!f||!ta) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    ta.value=String(reader.result||'');
+    if(st){ st.textContent='✓ Wczytano: '+f.name+' ('+ta.value.length+' znaków)'; st.className='fstatus'; }
+  };
+  reader.onerror=()=>{ if(st){ st.textContent='Nie udało się odczytać pliku.'; st.className='fstatus err'; } };
+  reader.readAsText(f);
 }
 
 // ═══════════════════════════════════════════════════
@@ -3671,9 +3774,14 @@ function toggleTheme(){
 (function init(){
   const saved=localStorage.getItem('budzet_theme');
   if(saved==='dark'){ document.documentElement.setAttribute('data-theme','dark'); document.getElementById('theme-lbl').textContent='Ciemny motyw'; }
+  const nowM=MONTHS_PL[new Date().getMonth()]+' '+new Date().getFullYear();
+  const months=getMonths();
+  if(months.includes(nowM)) curMonth=nowM;
+  else if(months.length) curMonth=months[months.length-1];
   document.getElementById('q-month').value=curMonth;
   document.getElementById('imp-month').value='';
   quickTypeChange();
+  bindImportDrop();
   applyRecurringExpenses();
   renderSidebar();
   renderDash();
