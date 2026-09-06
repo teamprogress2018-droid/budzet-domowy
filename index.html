@@ -798,7 +798,7 @@ body.sched-dragging{touch-action:none;user-select:none}
       </div>
       <div class="fg">
         <label>Nazwa / opis</label>
-        <input type="text" id="q-name" placeholder="np. Biedronka, Plan treningowy Jan">
+        <input type="text" id="q-name" placeholder="np. Biedronka, ZUS, Plan treningowy Jan" oninput="syncQuickRecurringFromName()">
       </div>
       <div class="fg">
         <label>Kwota (zł)</label>
@@ -837,6 +837,8 @@ body.sched-dragging{touch-action:none;user-select:none}
     <div class="tip">
       <strong>Jak importować:</strong> wklej <strong>zrzut ekranu</strong> z aplikacji banku (Ctrl+V) albo zdjęcie z WhatsApp — odczytam tekst ze zdjęcia.<br>
       Albo w PDF zaznacz tekst → <strong>Ctrl+C</strong> → <strong>Wklej ze schowka</strong>. Możesz też upuścić plik <strong>.txt / .jpg / .png</strong>.
+      <strong>Jak importować:</strong> w PDF zaznacz tekst → <strong>Ctrl+C</strong> (Mac: <strong>Cmd+C</strong>) → kliknij pole poniżej → <strong>Ctrl+V</strong> albo przycisk <strong>Wklej ze schowka</strong>.<br>
+      Przeciąganie z okna PDF często nie działa — wtedy wklej. Możesz też upuścić plik <strong>.txt</strong>. Miesiąc wykryje się sam (ING, PKO, Revolut też).
     </div>
     <div class="frow f1">
       <div class="fg"><label>Miesiąc (auto-wykrywany lub wpisz ręcznie)</label>
@@ -854,6 +856,8 @@ body.sched-dragging{touch-action:none;user-select:none}
       <button type="button" class="btn-p" onclick="pasteImportClipboard()">Wklej ze schowka</button>
       <label class="btn-s" style="margin:0;cursor:pointer">Wybierz plik / zdjęcie
         <input id="imp-file" type="file" accept=".txt,.csv,text/plain,image/*,.jpg,.jpeg,.png,.webp,.gif" hidden onchange="loadImportFile(this)">
+      <label class="btn-s" style="margin:0;cursor:pointer">Wybierz plik .txt
+        <input id="imp-file" type="file" accept=".txt,.csv,text/plain" hidden onchange="loadImportFile(this)">
       </label>
     </div>
     <div class="frow">
@@ -2377,43 +2381,57 @@ function quickTypeChange(){
   }
 }
 
+function looksLikeRecurringExpenseName(name){
+  return /^(zus|czynsz)\b/i.test(String(name||'').trim());
+}
+
+function syncQuickRecurringFromName(){
+  const rec=document.getElementById('q-recurring');
+  const name=document.getElementById('q-name');
+  const cat=document.getElementById('q-cat');
+  if(!rec||!name) return;
+  if(looksLikeRecurringExpenseName(name.value)){
+    rec.checked=true;
+    if(cat && [...cat.options].some(o=>o.value==='ZUS / podatki') && /zus/i.test(name.value) && (cat.value==='Inne'||!cat.value)){
+      cat.value='ZUS / podatki';
+    }
+  }
+}
+
 function syncQuickMonthFromDate(){
   const dateEl=document.getElementById('q-date');
   const monthEl=document.getElementById('q-month');
   if(!dateEl||!monthEl) return;
   const raw=dateEl.value.trim();
-  if(!/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(raw)) return;
-  const parsed=parseTxDateFields(raw, monthEl.value);
-  monthEl.value=parsed.month;
+  if(!raw) return;
+  if(!monthEl.value.trim()) monthEl.value=curMonth;
 }
 
 function syncAddMonthField(){
   const monthEl=document.getElementById('q-month');
   if(!monthEl) return;
-  const dateEl=document.getElementById('q-date');
-  const raw=(dateEl&&dateEl.value||'').trim();
-  if(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(raw)){
-    monthEl.value=parseTxDateFields(raw, curMonth).month;
-  } else if(!monthEl.matches(':focus')){
-    monthEl.value=curMonth;
-  }
+  if(!monthEl.matches(':focus')) monthEl.value=curMonth;
 }
 
 function parseTxDateFields(dateStr, monthStr){
   const raw=String(dateStr||'').trim();
   const hit=raw.match(/^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?$/);
   let day=null, monthIndex=null, year=null;
-  if(hit){
-    day=parseInt(hit[1],10);
-    monthIndex=parseInt(hit[2],10)-1;
-    if(hit[3]){
-      year=parseInt(hit[3],10);
-      if(year<100) year+=2000;
-    }
-  }
   const mp=String(monthStr||curMonth||'').split(' ');
   const fromLabel=MONTHS_PL.indexOf(mp[0]);
   const yearFromLabel=parseInt(mp[1],10);
+  if(fromLabel>=0) monthIndex=fromLabel;
+  if(yearFromLabel) year=yearFromLabel;
+  if(hit){
+    day=parseInt(hit[1],10);
+    if(fromLabel<0){
+      monthIndex=parseInt(hit[2],10)-1;
+      if(hit[3]){
+        year=parseInt(hit[3],10);
+        if(year<100) year+=2000;
+      }
+    }
+  }
   if(year==null || isNaN(year)) year = yearFromLabel || new Date().getFullYear();
   if(monthIndex==null || monthIndex<0 || monthIndex>11) monthIndex = fromLabel>=0 ? fromLabel : new Date().getMonth();
   if(!day || day<1) day=1;
@@ -2452,7 +2470,8 @@ function doQuickAdd(){
   const src = isCashType ? 'cash' : 'bank';
   const viewing=curMonth;
   const recEl = document.getElementById('q-recurring');
-  const makeRecurring = !!(recEl && recEl.checked && !isInc);
+  if(recEl && !isInc && looksLikeRecurringExpenseName(name)) recEl.checked=true;
+  const makeRecurring = !!(recEl && recEl.checked && !isInc) || (!isInc && looksLikeRecurringExpenseName(name));
   let recurringId=null;
   if(makeRecurring){
     recurringId = upsertRecurringExpense({
@@ -2540,6 +2559,26 @@ async function ocrImportImage(fileOrBlob, label){
   }catch(err){
     if(st){ st.textContent='Nie udało się odczytać zdjęcia. Wklej tekst skopiowany z wyciągu PDF.'; st.className='fstatus err'; }
   }
+function htmlToPlain(html){
+  const d=document.createElement('div');
+  d.innerHTML=String(html||'');
+  return String(d.innerText||d.textContent||'').trim();
+}
+function textFromTransfer(transfer){
+  if(!transfer) return '';
+  let text='';
+  try{ text=(transfer.getData('text/plain')||transfer.getData('text')||'').trim(); }catch(e){}
+  if(!text){
+    try{ text=htmlToPlain(transfer.getData('text/html')||''); }catch(e){}
+  }
+  return text;
+}
+function looksLikeBankStatement(text){
+  const t=String(text||'');
+  if(t.length<50) return false;
+  const dates=(t.match(/\d{1,2}[./-]\d{2}(?:[./-]\d{2,4})?/g)||[]).length;
+  const amts=(t.match(/\d{1,3}(?:\s?\d{3})*[,.]\d{2}/g)||[]).length;
+  return dates>=2 || amts>=3 || /santander|wyci[aą]g|historia operacj|revolut|ing bank|pko bp/i.test(t);
 }
 function setImportText(text, note){
   const ta=document.getElementById('imp-text');
@@ -2552,6 +2591,8 @@ function setImportText(text, note){
 }
 
 function bindImportDrop(){
+  if(bindImportDrop.ok) return;
+  bindImportDrop.ok=true;
   const box=document.getElementById('imp-drop');
   const ta=document.getElementById('imp-text');
   if(!box||!ta||bindImportDrop.ok) return;
@@ -2603,8 +2644,71 @@ function bindImportDrop(){
     if(img){
       e.preventDefault();
       ocrImportImage(img, img.name||'zrzut ekranu');
+  const page=document.getElementById('page-add');
+  if(!ta) return;
+
+  function applyDrop(transfer){
+    const text=textFromTransfer(transfer);
+    if(text){
+      setImportText(text, '✓ Upuśćono tekst ('+text.length+' znaków)');
+      return true;
     }
+    const f=transfer && transfer.files && transfer.files[0];
+    if(f){ readImportFile(f); return true; }
+    return false;
+  }
+
+  const dragOver=e=>{
+    if(curPage!=='add') return;
+    const types=[...((e.dataTransfer&&e.dataTransfer.types)||[])];
+    if(!types.length || types.includes('Files') || types.includes('text/plain') || types.includes('text/html') || types.includes('Text')){
+      e.preventDefault();
+      if(e.dataTransfer) e.dataTransfer.dropEffect='copy';
+      if(box) box.classList.add('over');
+    }
+  };
+  const dragLeave=e=>{
+    if(box && (e.target===box || e.target===page)) box.classList.remove('over');
+  };
+  const dropped=e=>{
+    if(curPage!=='add') return;
+    if(!e.dataTransfer) return;
+    if(applyDrop(e.dataTransfer)){
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if(box) box.classList.remove('over');
+  };
+
+  [page, box, ta].forEach(el=>{
+    if(!el) return;
+    el.addEventListener('dragenter', dragOver);
+    el.addEventListener('dragover', dragOver);
+    el.addEventListener('dragleave', dragLeave);
+    el.addEventListener('drop', dropped);
   });
+  document.addEventListener('dragover', dragOver);
+  document.addEventListener('drop', dropped);
+
+  document.addEventListener('paste', e=>{
+    if(curPage!=='add') return;
+    const text=textFromTransfer(e.clipboardData);
+    const f=e.clipboardData && e.clipboardData.files && e.clipboardData.files[0];
+    if(!text && f){
+      e.preventDefault();
+      readImportFile(f);
+      return;
+    }
+    if(!text) return;
+    const tgt=e.target;
+    const id=tgt && tgt.id;
+    const typingShort = (id==='q-name'||id==='q-amt'||id==='q-date'||id==='q-month'||id==='imp-month') && !looksLikeBankStatement(text);
+    if(typingShort) return;
+    e.preventDefault();
+    setImportText(text, '✓ Wklejono '+text.length+' znaków');
+  }, true);
+
+  if(box) box.addEventListener('click', ()=>{ ta.focus(); });
 }
 
 async function pasteImportClipboard(){
@@ -3501,7 +3605,36 @@ function recurringEndMonth(){
   return {year:endY, month:endM};
 }
 
+function adoptExistingRecurringFromHistory(){
+  const latest={};
+  data.forEach(t=>{
+    if(!(t.amt<0) || !looksLikeRecurringExpenseName(t.name)) return;
+    const key=String(t.name).trim().toLowerCase();
+    const prev=latest[key];
+    if(!prev || mIdx(t.month)>mIdx(prev.month)) latest[key]=t;
+  });
+  Object.values(latest).forEach(t=>{
+    const key=String(t.name).trim().toLowerCase();
+    if(getSubs().some(s=>s.autoPost && String(s.name).trim().toLowerCase()===key)) return;
+    const parsed=parseTxDateFields(t.date, t.month);
+    const todayLabel=MONTHS_PL[new Date().getMonth()]+' '+new Date().getFullYear();
+    let startLabel=todayLabel;
+    if(t.month && mIdx(t.month)>mIdx(startLabel)) startLabel=t.month;
+    if(curMonth && mIdx(curMonth)>mIdx(startLabel)) startLabel=curMonth;
+    upsertRecurringExpense({
+      name: t.name,
+      amount: Math.abs(t.amt),
+      cat: /zus/i.test(t.name) ? (t.cat==='Inne' ? 'ZUS / podatki' : t.cat) : t.cat,
+      src: t.src||'bank',
+      cycle: 'monthly',
+      day: parsed.day,
+      startISO: parseTxDateFields(t.date, startLabel).iso
+    });
+  });
+}
+
 function applyRecurringExpenses(){
+  adoptExistingRecurringFromHistory();
   const subs=getSubs().filter(s=>s.active!==false && s.autoPost);
   if(!subs.length) return 0;
   const end=recurringEndMonth();
