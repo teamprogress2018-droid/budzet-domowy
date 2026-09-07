@@ -516,7 +516,7 @@ body.sched-dragging{touch-action:none;user-select:none}
     <div class="mc"><div class="ml">Wydatki łącznie</div><div class="mv r" id="exp-total">—</div></div>
     <div class="mc"><div class="ml">Kartą/przelewem</div><div class="mv r" id="exp-bank">—</div></div>
     <div class="mc"><div class="ml">Gotówką</div><div class="mv r" id="exp-cash">—</div></div>
-    <div class="mc"><div class="ml">Koszty firmowe</div><div class="mv p" id="exp-biz">—</div></div>
+    <div class="mc"><div class="ml">Prowadzenie firmy</div><div class="mv p" id="exp-biz">—</div></div>
   </div>
 
   <div class="g2" style="margin-bottom:18px">
@@ -680,7 +680,7 @@ body.sched-dragging{touch-action:none;user-select:none}
   <div class="card form-card" id="sub-form-modal" style="display:none;margin-bottom:16px;padding:18px">
     <div class="sh" style="margin-bottom:12px"><h3>Nowa subskrypcja</h3></div>
     <input type="hidden" id="sub-edit-id">
-    <div class="fg"><label>Nazwa (np. ZUS, Netflix, czynsz)</label><input id="sub-name" placeholder="Nazwa opłaty"></div>
+    <div class="fg"><label>Nazwa (np. ZUS, Netflix, czynsz)</label><input id="sub-name" placeholder="Nazwa opłaty" oninput="syncSubCatFromName()"></div>
     <div class="fg-row">
       <div class="fg"><label>Kwota (zł)</label><input id="sub-amount" type="number" placeholder="0" step="0.01"></div>
       <div class="fg"><label>Cykl</label><select id="sub-cycle"><option value="monthly">Miesięcznie</option><option value="yearly">Rocznie</option></select></div>
@@ -802,7 +802,7 @@ body.sched-dragging{touch-action:none;user-select:none}
           <option value="income">💰 Przychód</option>
           <option value="cash-exp">💵 Wydatek gotówkowy</option>
           <option value="cash-inc">🤝 Przychód gotówkowy</option>
-          <option value="biz">🏢 Koszt firmowy</option>
+          <option value="biz">🏢 Prowadzenie firmy</option>
           <option value="phone">📱 Telefon dziecka</option>
           <option value="salary">💼 Wynagrodzenie</option>
           <option value="training">💪 Plan treningowy / usługa</option>
@@ -1048,11 +1048,12 @@ body.sched-dragging{touch-action:none;user-select:none}
 // ═══════════════════════════════════════════════════
 const CAT_COLORS = {
   'Spożywcze':'#1D9E75','Paliwo':'#E76F51','Zakupy online':'#7F77DD',
-  'Prezenty/różne':'#D4537E','Jedzenie poza domem':'#E9A824','Subskrypcje':'#378ADD','ZUS / podatki':'#7C3AED',
+  'Prezenty/różne':'#D4537E','Jedzenie poza domem':'#E9A824','Subskrypcje':'#378ADD',
+  'Prowadzenie firmy':'#6D28D9','ZUS / podatki':'#6D28D9',
   'Sport i hobby':'#639922','Edukacja':'#8B5CF6','Dom i mieszkanie':'#888780',
   'Zdrowie':'#E24B4A','Kosmetyki':'#F4A261','Telefon/TV/internet':'#0F6E56',
   'Opłaty bankowe':'#9b9b95','Transport/parking':'#5F5E5A',
-  'Telefon dziecka':'#06B6D4','Koszty firmowe':'#6D28D9',
+  'Telefon dziecka':'#06B6D4','Koszty firmowe':'#7C3AED',
   'Spłata długu':'#C0392B',
   'Wynagrodzenie':'#15803D','Plan treningowy':'#059669',
   'Przychód gotówkowy':'#2563EB','Przychód bankowy':'#16A34A',
@@ -1062,8 +1063,8 @@ const CAT_EMOJI = {
   'Spożywcze':'🛒','Paliwo':'⛽','Zakupy online':'💻','Prezenty/różne':'🎁',
   'Jedzenie poza domem':'🍔','Subskrypcje':'🔄','Sport i hobby':'🏋️','Edukacja':'📚',
   'Dom i mieszkanie':'🏠','Zdrowie':'❤️','Kosmetyki':'✨','Telefon/TV/internet':'📡',
-  'Opłaty bankowe':'🏦','ZUS / podatki':'📄','Transport/parking':'🚗','Telefon dziecka':'📱',
-  'Koszty firmowe':'🏢','Wynagrodzenie':'💼','Plan treningowy':'💪',
+  'Opłaty bankowe':'🏦','Prowadzenie firmy':'🏢','ZUS / podatki':'🏢','Transport/parking':'🚗','Telefon dziecka':'📱',
+  'Koszty firmowe':'🧾','Wynagrodzenie':'💼','Plan treningowy':'💪',
   'Spłata długu':'💰',
   'Przychód gotówkowy':'💵','Przychód bankowy':'🏦','Inne przychody':'💰',
   'Przychód':'💰','Inne':'•'
@@ -1082,21 +1083,38 @@ const INC_SOURCES = {
 const EXP_CATS_PERSONAL = [
   'Spożywcze','Paliwo','Jedzenie poza domem','Zakupy online','Sport i hobby',
   'Edukacja','Dom i mieszkanie','Zdrowie','Subskrypcje','Kosmetyki',
-  'Telefon/TV/internet','Opłaty bankowe','ZUS / podatki','Transport/parking','Telefon dziecka',
+  'Telefon/TV/internet','Opłaty bankowe','Transport/parking','Telefon dziecka',
   'Spłata długu','Prezenty/różne','Inne'
 ];
-const EXP_CATS_BIZ = ['Koszty firmowe'];
+const FIRM_RUN_CAT = 'Prowadzenie firmy';
+const LEGACY_ZUS_CAT = 'ZUS / podatki';
+const EXP_CATS_BIZ = [FIRM_RUN_CAT,'Koszty firmowe'];
+const EXP_CATS = [...EXP_CATS_PERSONAL, ...EXP_CATS_BIZ];
 
 const TYPE_CATS = {
-  'expense':    EXP_CATS_PERSONAL,
+  'expense':    EXP_CATS,
   'income':     ['Przychód bankowy','Inne przychody'],
-  'cash-exp':   EXP_CATS_PERSONAL,
+  'cash-exp':   EXP_CATS,
   'cash-inc':   ['Przychód gotówkowy'],
-  'biz':        ['Koszty firmowe'],
+  'biz':        EXP_CATS_BIZ,
   'phone':      ['Telefon dziecka'],
   'salary':     ['Wynagrodzenie'],
   'training':   ['Plan treningowy'],
 };
+
+function isZusLikeName(name){
+  return /\bzus\b/i.test(String(name||''));
+}
+function isFirmRunCat(cat){
+  return EXP_CATS_BIZ.includes(cat) || cat===LEGACY_ZUS_CAT;
+}
+function isFirmRunItem(item){
+  if(!item) return false;
+  return isFirmRunCat(item.cat) || isZusLikeName(item.name);
+}
+function isBizExpenseCat(cat){
+  return isFirmRunCat(cat);
+}
 
 // ═══════════════════════════════════════════════════
 // DANE SEED
@@ -1400,7 +1418,7 @@ function txHtml(t){
     : t.src==='split'
     ? '<span class="tx-badge" style="background:var(--blue-bg);color:var(--blue)">💵 '+fmt(t.cashAmt||0)+' + 🏦 '+fmt(t.bankAmt||0)+'</span>'
     : '';
-  const bizBadge = ['Koszty firmowe','Wynagrodzenie','Plan treningowy'].includes(t.cat)
+  const bizBadge = (isFirmRunCat(t.cat) || t.cat==='Wynagrodzenie' || t.cat==='Plan treningowy')
     ? `<span class="tx-badge" style="background:var(--purple-bg);color:var(--purple)">${CAT_EMOJI[t.cat]||'•'} ${t.cat}</span>`
     : `<span class="tx-src">${t.cat}</span>`;
   return `<div class="tx-row">
@@ -1466,10 +1484,10 @@ function renderDash(){
 
   renderHoldings();
 
-  // POPRAWKA: Połączony widok zobowiązań (długi + subskrypcje) — jedno miejsce, poczucie kontroli
-  const debts = getDebts();
+  // Zobowiązania = długi i subskrypcje osobiste. ZUS i koszty firmy to wydatki, nie zadłużenie.
+  const debts = obligationDebts(getDebts());
   const subs = getSubs();
-  const activeSubs = subs.filter(s=>s.active!==false);
+  const activeSubs = obligationSubs(subs);
   const totalDebt = debts.reduce((s,d)=>s+d.balance,0);
   const minPayments = debts.reduce((s,d)=>s+(d.minPayment||0),0);
   const monthlySubsCost = activeSubs.reduce((s,x)=> s + (x.cycle==='monthly'?x.amount:x.amount/12), 0);
@@ -2474,7 +2492,7 @@ function renderSchedule(){
 function renderExpenses(){
   const {tx,exp,cashExp,sorted} = mdata(curMonth);
   const bankExp = exp - cashExp;
-  const bizExp = Math.abs(tx.filter(t=>isExpense(t)&&t.cat==='Koszty firmowe').reduce((s,t)=>s+t.amt,0));
+  const bizExp = Math.abs(tx.filter(t=>isExpense(t)&&isBizExpenseCat(t.cat)).reduce((s,t)=>s+t.amt,0));
   document.getElementById('exp-sub').textContent = curMonth;
   document.getElementById('exp-total').textContent = fmt(exp);
   document.getElementById('exp-bank').textContent = fmt(bankExp);
@@ -2659,8 +2677,11 @@ function syncQuickRecurringFromName(){
   if(!rec||!name) return;
   if(looksLikeRecurringExpenseName(name.value)){
     rec.checked=true;
-    if(cat && [...cat.options].some(o=>o.value==='ZUS / podatki') && /zus/i.test(name.value) && (cat.value==='Inne'||!cat.value)){
-      cat.value='ZUS / podatki';
+    if(cat && isZusLikeName(name.value)){
+      if(![...cat.options].some(o=>o.value===FIRM_RUN_CAT)){
+        cat.insertAdjacentHTML('afterbegin', `<option value="${FIRM_RUN_CAT}">${FIRM_RUN_CAT}</option>`);
+      }
+      cat.value=FIRM_RUN_CAT;
     }
   }
 }
@@ -2736,18 +2757,20 @@ function doQuickAdd(){
 
   const src = isCashType ? 'cash' : 'bank';
   const viewing=curMonth;
+  let resolvedCat = cat;
+  if(!isInc && isZusLikeName(name)) resolvedCat = FIRM_RUN_CAT;
   const recEl = document.getElementById('q-recurring');
   if(recEl && !isInc && looksLikeRecurringExpenseName(name)) recEl.checked=true;
   const makeRecurring = !!(recEl && recEl.checked && !isInc) || (!isInc && looksLikeRecurringExpenseName(name));
   let recurringId=null;
   if(makeRecurring){
     recurringId = upsertRecurringExpense({
-      name, amount: Math.abs(amt), cat, src,
+      name, amount: Math.abs(amt), cat: resolvedCat, src,
       cycle: 'monthly', day: parsed.day, startISO: parsed.iso
     });
   }
 
-  const tx={ date: parsed.date, iso: parsed.iso, name, cat, amt, month: parsed.month, src, id: Date.now() };
+  const tx={ date: parsed.date, iso: parsed.iso, name, cat: resolvedCat, amt, month: parsed.month, src, id: Date.now() };
   if(recurringId) tx.recurringId=recurringId;
   data.push(tx);
   save();
@@ -3041,7 +3064,7 @@ const CAT_KW = {
   'Kosmetyki':['rossmann','douglas','sephora','hebe','drogeria'],
   'Telefon/TV/internet':['canal+','play','plus','orange','t-mobile','upc','netia','vectra','polsat'],
   'Opłaty bankowe':['opłata','prowizja','opłata miesięczna','opłata za prowadzenie'],
-  'ZUS / podatki':['zus','us skarb','urząd skarbowy','pit ','vat ','podatek'],
+  'Prowadzenie firmy':['zus','us skarb','urząd skarbowy','pit ','vat ','podatek'],
   'Transport/parking':['parking','sppp','kbu','pkp','bus','uber','bolt','taxi','mzk'],
 };
 
@@ -3207,7 +3230,7 @@ const DEFAULT_LIMITS = {
   'Spożywcze':1500,'Paliwo':500,'Jedzenie poza domem':300,'Zakupy online':400,
   'Sport i hobby':300,'Edukacja':300,'Dom i mieszkanie':400,'Zdrowie':300,
   'Subskrypcje':200,'Kosmetyki':200,'Telefon/TV/internet':200,'Opłaty bankowe':100,
-  'Transport/parking':100,'Telefon dziecka':200,'Koszty firmowe':500,
+  'Transport/parking':100,'Telefon dziecka':200,'Prowadzenie firmy':2000,'Koszty firmowe':500,
   'Prezenty/różne':300,'Inne':200
 };
 
@@ -3536,6 +3559,13 @@ function delEnv(i){ const envs=getEnvelopes(); envs.splice(i,1); saveEnvelopes(e
 // ═══════════════════════════════════════════════════
 function getDebts(){ return JSON.parse(localStorage.getItem('budzet_debts')||'[]'); }
 function saveDebtsData(d){ localStorage.setItem('budzet_debts', JSON.stringify(d)); }
+
+function obligationDebts(debts){
+  return (debts||[]).filter(d=>!isZusLikeName(d.name));
+}
+function obligationSubs(subs){
+  return (subs||[]).filter(s=>s.active!==false && !isFirmRunItem(s));
+}
 const DEBT_TYPE_LABEL = {karta:'💳', rodzina:'👤', pozyczka:'🏦', inne:'📋'};
 
 function showAddDebt(){
@@ -3569,6 +3599,33 @@ function saveDebtForm(){
   const balance=parseFloat(document.getElementById('debt-balance').value)||0;
   const editId=document.getElementById('debt-edit-id').value;
   if(!name){ alert('Podaj nazwę długu.'); return; }
+  if(isZusLikeName(name)){
+    const minPay=parseFloat(document.getElementById('debt-min-payment').value)||0;
+    const monthly = minPay>0 ? minPay : (balance>0 && balance<=4000 ? balance : 0);
+    if(monthly>0){
+      upsertRecurringExpense({
+        name,
+        amount: monthly,
+        cat: FIRM_RUN_CAT,
+        src: 'bank',
+        cycle: 'monthly',
+        startISO: toISODate(new Date())
+      });
+      applyRecurringExpenses();
+    }
+    if(editId){
+      saveDebtsData(getDebts().filter(d=>String(d.id)!==String(editId)));
+      if(typeof fbDeleteDebt==='function') fbDeleteDebt(editId);
+    }
+    closeDebtForm();
+    renderSidebar();
+    renderDebts();
+    goPage('expenses');
+    alert(monthly>0
+      ? 'ZUS to koszt prowadzenia firmy, nie dług. Zapisałem go jako cykliczny wydatek w kategorii „Prowadzenie firmy”.'
+      : 'ZUS to koszt prowadzenia firmy, nie zadłużenie. Dodaj go w wydatkach albo w subskrypcjach jako cykliczną składkę.');
+    return;
+  }
   if(balance<0){ alert('Saldo nie może być ujemne.'); return; }
   if(!editId && balance<=0){ alert('Podaj nazwę i saldo długu.'); return; }
   let debts=getDebts();
@@ -3723,7 +3780,7 @@ function saveDebtPayment(){
 }
 
 function renderDebts(){
-  const debts=getDebts();
+  const debts=obligationDebts(getDebts());
   const total=debts.reduce((s,d)=>s+d.balance,0);
   const minSum=debts.reduce((s,d)=>s+(d.minPayment||0),0);
   const withOriginal=debts.filter(d=>d.original>0);
@@ -3776,9 +3833,22 @@ function saveSubsData(s){ localStorage.setItem('budzet_subs', JSON.stringify(s))
 function fillSubCatSelect(selected){
   const sel=document.getElementById('sub-cat');
   if(!sel) return;
-  const cats=EXP_CATS_PERSONAL.slice();
+  const cats=[...new Set([...EXP_CATS_PERSONAL, ...EXP_CATS_BIZ])];
   if(selected && !cats.includes(selected)) cats.unshift(selected);
-  sel.innerHTML=cats.map(c=>`<option${c===(selected||'ZUS / podatki')?' selected':''}>${c}</option>`).join('');
+  const pick = selected || 'Subskrypcje';
+  sel.innerHTML=cats.map(c=>`<option${c===pick?' selected':''}>${c}</option>`).join('');
+}
+
+function syncSubCatFromName(){
+  const name=document.getElementById('sub-name');
+  const cat=document.getElementById('sub-cat');
+  if(!name||!cat) return;
+  if(isZusLikeName(name.value)){
+    if(![...cat.options].some(o=>o.value===FIRM_RUN_CAT)){
+      cat.insertAdjacentHTML('afterbegin', `<option value="${FIRM_RUN_CAT}">${FIRM_RUN_CAT}</option>`);
+    }
+    cat.value=FIRM_RUN_CAT;
+  }
 }
 
 function showAddSub(){
@@ -3888,7 +3958,7 @@ function adoptExistingRecurringFromHistory(){
     upsertRecurringExpense({
       name: t.name,
       amount: Math.abs(t.amt),
-      cat: /zus/i.test(t.name) ? (t.cat==='Inne' ? 'ZUS / podatki' : t.cat) : t.cat,
+      cat: isZusLikeName(t.name) ? FIRM_RUN_CAT : t.cat,
       src: t.src||'bank',
       cycle: 'monthly',
       day: parsed.day,
@@ -3942,6 +4012,61 @@ function applyRecurringExpenses(){
   return added;
 }
 
+function migrateZusToBusinessRun(){
+  let txChanged=false;
+  data.forEach(t=>{
+    if(!(t.amt<0)) return;
+    if(t.cat===LEGACY_ZUS_CAT || isZusLikeName(t.name)){
+      if(t.cat!==FIRM_RUN_CAT){ t.cat=FIRM_RUN_CAT; txChanged=true; }
+    }
+  });
+  if(txChanged) save();
+
+  const subs=getSubs();
+  let subsChanged=false;
+  const nextSubs=subs.map(s=>{
+    if(!isFirmRunItem(s) && s.cat!==LEGACY_ZUS_CAT) return s;
+    const cat = isZusLikeName(s.name) || s.cat===LEGACY_ZUS_CAT || s.cat===FIRM_RUN_CAT ? FIRM_RUN_CAT : s.cat;
+    if(s.cat===cat) return s;
+    subsChanged=true;
+    return Object.assign({}, s, {cat});
+  });
+  if(subsChanged) saveSubsData(nextSubs);
+
+  const debts=getDebts();
+  const keep=[];
+  let debtsChanged=false;
+  debts.forEach(d=>{
+    if(!isZusLikeName(d.name)){ keep.push(d); return; }
+    debtsChanged=true;
+    const monthly = d.minPayment>0 ? d.minPayment : (d.balance>0 && d.balance<=4000 ? d.balance : 0);
+    if(monthly>0){
+      upsertRecurringExpense({
+        name: d.name,
+        amount: monthly,
+        cat: FIRM_RUN_CAT,
+        src: 'bank',
+        cycle: 'monthly',
+        startISO: toISODate(new Date())
+      });
+    }
+    if(typeof fbDeleteDebt==='function') fbDeleteDebt(d.id);
+  });
+  if(debtsChanged) saveDebtsData(keep);
+
+  try{
+    const raw=localStorage.getItem('budzet_limits');
+    if(raw){
+      const limits=JSON.parse(raw);
+      if(limits && limits[LEGACY_ZUS_CAT]){
+        limits[FIRM_RUN_CAT]=Math.max(Number(limits[FIRM_RUN_CAT])||0, Number(limits[LEGACY_ZUS_CAT])||0);
+        delete limits[LEGACY_ZUS_CAT];
+        setLimits(limits);
+      }
+    }
+  }catch(e){}
+}
+
 function saveSubForm(){
   const name=document.getElementById('sub-name').value.trim();
   const amount=parseFloat(document.getElementById('sub-amount').value)||0;
@@ -3958,7 +4083,7 @@ function saveSubForm(){
     nextDate: nextDate || parsed.iso,
     startISO: nextDate || parsed.iso,
     day: parsed.day,
-    cat: document.getElementById('sub-cat').value || 'Inne',
+    cat: (isZusLikeName(name) ? FIRM_RUN_CAT : (document.getElementById('sub-cat').value || 'Inne')),
     src: document.getElementById('sub-src').value || 'bank',
     autoPost,
     active: true
@@ -4181,11 +4306,14 @@ function clearAdvisorChat(){ if(!confirm('Wyczyścić całą rozmowę z doradcą
 function buildAdvisorContext(){
   const months = getMonths();
   const {inc,exp,balance} = mdata(curMonth);
-  const debts = getDebts();
-  const subs = getSubs().filter(s=>s.active!==false);
+  const debts = obligationDebts(getDebts());
+  const allSubs = getSubs().filter(s=>s.active!==false);
+  const subs = obligationSubs(allSubs);
+  const firmSubs = allSubs.filter(isFirmRunItem);
   const totalDebt = debts.reduce((s,d)=>s+d.balance,0);
   const minPayments = debts.reduce((s,d)=>s+(d.minPayment||0),0);
   const monthlySubsCost = subs.reduce((s,x)=> s + (x.cycle==='monthly'?x.amount:x.amount/12), 0);
+  const monthlyFirm = firmSubs.reduce((s,x)=> s + (x.cycle==='monthly'?x.amount:x.amount/12), 0);
 
   // Średnia z ostatnich do 3 miesięcy dla bardziej wiarygodnego obrazu (nie tylko bieżący miesiąc)
   const lastMonths = months.slice(-3);
@@ -4204,16 +4332,19 @@ DANE UŻYTKOWNIKA:
 Bieżący miesiąc (${curMonth}): przychody ${fmt(inc)}, wydatki ${fmt(exp)}, bilans ${fmt(balance,true)}.
 Średnio z ostatnich ${lastMonths.length} mies.: przychody ${fmt(avgInc)}, wydatki ${fmt(avgExp)}, wolne środki ~${fmt(avgInc-avgExp)}/mc.
 
-DŁUGI (łącznie ${fmt(totalDebt)}, min. raty razem ${fmt(minPayments)}/mc):
+DŁUGI (łącznie ${fmt(totalDebt)}, min. raty razem ${fmt(minPayments)}/mc — bez ZUS, to koszt firmy):
 ${debts.length ? debts.map(d=>`- ${d.name}: ${fmt(d.balance)}${d.rate?`, ${d.rate}% rocznie`:''}, min. rata ${fmt(d.minPayment||0)}`).join('\n') : '(brak zapisanych długów)'}
 
-SUBSKRYPCJE (aktywne, razem ~${fmt(monthlySubsCost)}/mc):
+SUBSKRYPCJE OSOBISTE (aktywne, razem ~${fmt(monthlySubsCost)}/mc):
 ${subs.length ? subs.map(s=>`- ${s.name}: ${fmt(s.amount)} (${s.cycle==='monthly'?'miesięcznie':'rocznie'})`).join('\n') : '(brak zapisanych subskrypcji)'}
+
+PROWADZENIE FIRMY (ZUS i koszty firmowe, ~${fmt(monthlyFirm)}/mc) — to wydatki operacyjne, nie zadłużenie:
+${firmSubs.length ? firmSubs.map(s=>`- ${s.name}: ${fmt(s.amount)} (${s.cycle==='monthly'?'miesięcznie':'rocznie'}, ${s.cat||FIRM_RUN_CAT})`).join('\n') : '(brak cyklicznych kosztów firmy)'}
 
 KONTROLA ZAKUPÓW IMPULSYWNYCH (ostatnie 7 dni):
 Kupione mimo bufora czasowego: ${fmt(weekBought)}. Zaoszczędzone dzięki rezygnacji: ${fmt(weekSkipped)}.
 
-Gdy użytkownik pyta "czy stać mnie na X" — porównaj kwotę z wolnymi środkami miesięcznymi (średnia przychody minus wydatki minus miesięczne obciążenie z długów/subskrypcji) i odpowiedz wprost tak/nie/ostrożnie, z uzasadnieniem liczbowym. Gdy pyta o przyspieszenie spłaty długu dodatkową kwotą — przelicz w miesiącach na podstawie podanych sald (jeśli brak oprocentowania, licz liniowo; jeśli jest oprocentowanie, uwzględnij je w przybliżeniu).`;
+Gdy użytkownik pyta "czy stać mnie na X" — porównaj kwotę z wolnymi środkami miesięcznymi (średnia przychody minus wydatki minus miesięczne obciążenie z długów i subskrypcji osobistych) i odpowiedz wprost tak/nie/ostrożnie, z uzasadnieniem liczbowym. Gdy pyta o przyspieszenie spłaty długu dodatkową kwotą — przelicz w miesiącach na podstawie podanych sald (jeśli brak oprocentowania, licz liniowo; jeśli jest oprocentowanie, uwzględnij je w przybliżeniu). ZUS i podatki to koszty prowadzenia firmy, nie długi.`;
   return ctx;
 }
 
@@ -4294,6 +4425,7 @@ function toggleTheme(){
   const saved=localStorage.getItem('budzet_theme');
   if(saved==='dark'){ document.documentElement.setAttribute('data-theme','dark'); document.getElementById('theme-lbl').textContent='Ciemny motyw'; }
   migrateMonthLabels();
+  migrateZusToBusinessRun();
   const nowM=MONTHS_PL[new Date().getMonth()]+' '+new Date().getFullYear();
   const months=getMonths();
   if(months.includes(nowM)) curMonth=nowM;
