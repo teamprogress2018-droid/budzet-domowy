@@ -805,7 +805,7 @@ body.sched-dragging{touch-action:none;user-select:none}
     <div class="tip">Zrób zdjęcie telefonem albo wybierz z galerii. Odczytam sklep, datę i <strong>sumę</strong> — sprawdzisz i wrzucę jeden wydatek, nie każdą pozycję z paragonu.</div>
     <div class="rcp-actions">
       <label class="btn-p" style="margin:0;cursor:pointer">Zrób zdjęcie
-        <input id="rcp-camera" type="file" accept="image/*" capture="environment" hidden onchange="scanReceiptFile(this)">
+        <input id="rcp-camera" type="file" accept="image/*" capture="environment" style="display:none" onchange="scanReceiptFile(this)">
       </label>
       <label class="btn-s" style="margin:0;cursor:pointer">Z galerii
         <input id="rcp-gallery" type="file" accept="image/*" hidden onchange="scanReceiptFile(this)">
@@ -2950,8 +2950,8 @@ function showReceiptThumb(fileOrBlob){
   wrap.style.display='block';
 }
 function presentReceiptReview(text){
-  const parsed=parseReceipt(text, (document.getElementById('rcp-month')||{}).value || (document.getElementById('imp-month')||{}).value || curMonth);
   const dated=parseReceiptDate(text);
+  const parsed=parseReceipt(text, dated && dated.month);
   const name=parsed[0]?parsed[0].name:parseReceiptMerchant(text);
   const amt=parsed[0]?Math.abs(parsed[0].amt):'';
   const month=parsed[0]?parsed[0].month:(dated&&dated.month)||curMonth;
@@ -3338,7 +3338,7 @@ function parseReceipt(text, monthHint){
   const total=parseReceiptTotal(text);
   const dated=parseReceiptDate(text);
   const name=parseReceiptMerchant(text);
-  const month=normalizeMonthLabel(monthHint||'') || (dated && dated.month) || curMonth;
+  const month=(dated && dated.month) || normalizeMonthLabel(monthHint||'') || curMonth;
   const date=dated ? dated.date : (function(){
     const canon=normalizeMonthLabel(month)||month||'';
     const mi=MONTHS_PL.indexOf(canon.split(' ')[0]);
@@ -4720,6 +4720,8 @@ function toggleTheme(){
   else if(months.length) curMonth=months[months.length-1];
   document.getElementById('q-month').value=curMonth;
   document.getElementById('imp-month').value='';
+  const cam=document.getElementById('rcp-camera');
+  if(cam) cam.setAttribute('capture','environment');
   quickTypeChange();
   bindImportDrop();
   migrateSchedulePlanned();
