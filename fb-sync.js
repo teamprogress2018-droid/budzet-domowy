@@ -92,6 +92,8 @@ async function fbSyncFromCloud(){
         return { ...data, id: parseInt(d.id) };
       });
       saveDebtsData(debts);
+      if(typeof migrateZusToBusinessRun==='function') migrateZusToBusinessRun();
+      if(typeof applyRecurringExpenses==='function') applyRecurringExpenses();
     }
     if(!impulseSnap.empty){
       const impulses = impulseSnap.docs.map(d=>{
@@ -110,6 +112,8 @@ async function fbSyncFromCloud(){
       if(curPage==='debts') renderDebts();
       if(curPage==='impulse') renderImpulse();
       if(curPage==='dashboard') renderDash();
+      if(curPage==='expenses' && typeof renderExpenses==='function') renderExpenses();
+      if(curPage==='subs' && typeof renderSubs==='function') renderSubs();
     }
     fbSetStatus('✓ Zsynchronizowano · ' + fbCurrentUser.email);
   } catch(e) {
