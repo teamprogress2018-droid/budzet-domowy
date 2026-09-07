@@ -180,7 +180,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .cal-cell.drop{background:var(--green-bg);outline:2px dashed var(--accent);outline-offset:-2px}
 .cal-slot{border-radius:5px;padding:3px 16px 3px 5px;font-size:10.5px;line-height:1.25;margin-bottom:2px;position:relative;overflow:hidden;cursor:grab;user-select:none}
 .cal-slot.planned{opacity:.82;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+.cal-slot.monthpay{box-shadow:inset 0 0 0 2px var(--amber)}
+.cal-slot.covered{opacity:.7}
 .cal-chip.planned{opacity:.8}
+.cal-chip.monthpay,.cal-chip.covered{font-style:italic}
 .cal-h .cal-earn.plan{color:var(--text2);font-weight:500}
 .cal-h .cal-ok{font-size:9px;color:var(--green);margin-top:2px;font-weight:600}
 .cal-slot.editing{outline:2px solid var(--accent);outline-offset:1px}
@@ -470,7 +473,7 @@ body.sched-dragging{touch-action:none;user-select:none}
       <div class="fg"><label>Imię i nazwisko</label><input id="sched-name" type="text" placeholder="np. Arek"></div>
     </div>
     <div class="frow f3">
-      <div class="fg"><label>Kwota za trening (zł)</label><input id="sched-amt" type="number" min="0.01" step="0.01" placeholder="0" oninput="onSchedAmtInput()"></div>
+      <div class="fg"><label id="sched-amt-lbl">Kwota za trening (zł)</label><input id="sched-amt" type="number" min="0" step="0.01" placeholder="0" oninput="onSchedAmtInput()"></div>
       <div class="fg"><label>Towarzystwo</label>
         <div class="seg" id="sched-guest-seg">
           <button type="button" class="btn-s" id="sched-guest-solo" onclick="setSchedGuest(false)" style="flex:1">Sam</button>
@@ -482,9 +485,11 @@ body.sched-dragging{touch-action:none;user-select:none}
           <button type="button" class="btn-s" id="sched-pay-cash" onclick="setSchedPay('cash')" style="flex:1">💵 Gotówka</button>
           <button type="button" class="btn-s" id="sched-pay-bank" onclick="setSchedPay('bank')" style="flex:1">🏦 Przelew</button>
           <button type="button" class="btn-s" id="sched-pay-split" onclick="setSchedPay('split')" style="flex:1.2;display:none" title="Jedna osoba gotówką, druga przelewem">💵+🏦 Różnie</button>
+          <button type="button" class="btn-s" id="sched-pay-month" onclick="setSchedPay('month')" style="flex:1.2" title="Z góry za cały miesiąc — nie dolicza się do dnia">📅 Za miesiąc</button>
         </div>
       </div>
     </div>
+    <div class="tip" id="sched-month-hint" style="display:none;margin:0 0 10px">To nie jest stawka za 1 trening. Kwota wchodzi do miesiąca, nie do zarobku dnia. Kolejne treningi tej osoby w tym miesiącu są już opłacone.</div>
     <div class="frow" id="sched-split-row" style="display:none">
       <div class="fg"><label>Gotówka (jedna osoba)</label><input id="sched-amt-cash" type="number" min="0.01" step="0.01" placeholder="0" oninput="onSchedSplitEdit('cash')"></div>
       <div class="fg"><label>Przelew (druga osoba)</label><input id="sched-amt-bank" type="number" min="0.01" step="0.01" placeholder="0" oninput="onSchedSplitEdit('bank')"></div>
@@ -1302,7 +1307,7 @@ function renderPage(){
 // HELPERS
 // ═══════════════════════════════════════════════════
 function mdata(month){
-  const tx = data.filter(t=>t.month===month && t.planned!==true);
+  const tx = data.filter(t=>t.month===month && t.planned!==true && t.monthCovered!==true);
   const inc = tx.filter(isIncome).reduce((s,t)=>s+t.amt,0);
   const exp = Math.abs(tx.filter(isExpense).reduce((s,t)=>s+t.amt,0));
   const cashInc = tx.filter(isIncome).reduce((s,t)=>s+cashIncomeOf(t),0);
@@ -1335,7 +1340,7 @@ function txHtml(t){
     <span class="tx-date">${t.date}</span>
     <div class="tx-info">
       <span class="tx-name">${displayName||''}</span>
-      <div class="tx-meta">${srcBadge}${bizBadge}${t.recurringId?'<span class="tx-badge" style="background:var(--purple-bg);color:var(--purple)">🔁 cykliczny</span>':''}${t.planned?'<span class="tx-badge" style="background:var(--amber-bg);color:var(--amber)">plan grafiku</span>':''}</div>
+      <div class="tx-meta">${srcBadge}${bizBadge}${t.recurringId?'<span class="tx-badge" style="background:var(--purple-bg);color:var(--purple)">🔁 cykliczny</span>':''}${t.planned?'<span class="tx-badge" style="background:var(--amber-bg);color:var(--amber)">plan grafiku</span>':''}${t.monthPay?'<span class="tx-badge" style="background:var(--amber-bg);color:var(--amber)">📅 za miesiąc</span>':''}${t.monthCovered?'<span class="tx-badge" style="background:var(--bg2);color:var(--text2)">opłacone z góry</span>':''}</div>
     </div>
     <span class="tx-amt" style="color:${col}">${t.amt>0?'+':''}${fmt(Math.abs(t.amt))}</span>
     <button type="button" class="tx-del" onclick="delTx(${data.indexOf(t)})" title="Usuń wpis">✕</button>
@@ -1513,6 +1518,7 @@ let schedDate = null;
 let schedHour = 6;
 let schedGuest = false;
 let schedPay = 'cash';
+let schedMonthSrc = 'bank';
 let schedEditIdx = null;
 
 function toISODate(d){
@@ -1544,8 +1550,26 @@ function txToISO(t){
   if(!dd||!mm||mi<0||!year) return '';
   return year+'-'+mm+'-'+dd;
 }
-function isTrainingIncome(t){ return t && t.cat==='Plan treningowy' && t.amt>0; }
+function isTrainingIncome(t){ return t && t.cat==='Plan treningowy' && (t.amt>0 || t.monthCovered===true); }
 function isTrainingPlanned(t){ return isTrainingIncome(t) && t.planned===true; }
+function isMonthPay(t){ return isTrainingIncome(t) && t.monthPay===true && t.monthCovered!==true; }
+function isMonthCovered(t){ return isTrainingIncome(t) && t.monthCovered===true; }
+function clientKey(name){ return String(name||'').trim().toLowerCase(); }
+function monthPrepaidFor(client, month, exceptIdx){
+  const n=clientKey(client);
+  if(!n||!month) return null;
+  return data.find((t,i)=>i!==exceptIdx && isMonthPay(t) && t.month===month && clientKey(scheduleClientName(t))===n) || null;
+}
+function trainingDayAmt(t){
+  if(!t || isMonthPay(t) || isMonthCovered(t)) return 0;
+  return t.amt||0;
+}
+function trainingMonthAmt(t){
+  if(!t || isMonthCovered(t)) return 0;
+  return t.amt||0;
+}
+function sumTrainingDay(list){ return list.reduce((s,t)=>s+trainingDayAmt(t),0); }
+function sumTrainingMonth(list){ return list.reduce((s,t)=>s+trainingMonthAmt(t),0); }
 function migrateSchedulePlanned(){
   const today=toISODate(new Date());
   let n=0;
@@ -1651,8 +1675,12 @@ function setSchedPay(v){
   if(v==='split'){
     schedPay='split';
     schedGuest=true;
+  } else if(v==='month'){
+    if(schedPay==='cash' || schedPay==='bank') schedMonthSrc=schedPay;
+    schedPay='month';
   } else {
     schedPay=v==='bank'?'bank':'cash';
+    schedMonthSrc=schedPay;
   }
   renderSchedule();
   if(schedPay==='split') fillSchedSplitFromTotal();
@@ -1690,6 +1718,8 @@ function onSchedSplitEdit(which){
   }
 }
 function schedPayHint(t){
+  if(isMonthCovered(t)) return 'opłacone';
+  if(isMonthPay(t)) return '📅 miesiąc'+(t.src==='cash'?' · 💵':' · 🏦');
   if(t.src==='split') return '💵 '+fmt(t.cashAmt||0)+' + 🏦 '+fmt(t.bankAmt||0);
   if(t.src==='cash') return '💵';
   return '🏦';
@@ -1759,6 +1789,12 @@ function newSchedTxId(){
   return Date.now()*1000 + newSchedTxId.n;
 }
 function cloneScheduleTx(t, iso, time){
+  const month=isoToMonthLabel(iso);
+  const client=scheduleClientName(t);
+  const sameMonth=t.month===month;
+  const alreadyPaid=!!monthPrepaidFor(client, month);
+  const cover = t.monthCovered===true || (t.monthPay===true && sameMonth) || alreadyPaid;
+  const keepMonthPay = t.monthPay===true && !sameMonth && !alreadyPaid;
   const c={
     id: newSchedTxId(),
     date: isoToTxDate(iso),
@@ -1766,15 +1802,23 @@ function cloneScheduleTx(t, iso, time){
     time,
     name: t.name,
     cat: 'Plan treningowy',
-    amt: t.amt,
-    month: isoToMonthLabel(iso),
-    src: t.src||'cash',
+    amt: cover ? 0 : t.amt,
+    month,
+    src: keepMonthPay || cover ? (t.src==='split'?'bank':(t.src||'bank')) : (t.src||'cash'),
     withGuest: !!t.withGuest,
-    planned: true
+    planned: true,
+    monthPay: keepMonthPay,
+    monthCovered: cover
   };
-  if(t.src==='split'){
+  if(!cover && !keepMonthPay && t.src==='split'){
     c.cashAmt=Number(t.cashAmt)||0;
     c.bankAmt=Number(t.bankAmt)||0;
+  }
+  if(keepMonthPay){
+    c.monthPay=true;
+    c.monthCovered=false;
+    c.amt=t.amt;
+    c.src=t.src==='cash'?'cash':'bank';
   }
   return c;
 }
@@ -1809,11 +1853,12 @@ function dropScheduleOnCell(idx, iso, hour){
     schedHour=hour;
     setSchedStatus('✓ Ustawiono godzinę: '+time+' '+client+' · '+fmt(t.amt));
   } else {
-    data.push(cloneScheduleTx(t, iso, time));
+    const copy=cloneScheduleTx(t, iso, time);
+    data.push(copy);
     save();
     schedDate=iso;
     schedHour=hour;
-    setSchedStatus('✓ Skopiowano: '+time+' '+client+' · '+fmt(t.amt));
+    setSchedStatus('✓ Skopiowano: '+time+' '+client+(copy.monthCovered?' · opłacone z góry':(' · '+fmt(copy.amt))));
   }
   syncSchedForm();
   renderSidebar();
@@ -1821,7 +1866,7 @@ function dropScheduleOnCell(idx, iso, hour){
 }
 
 function copyWeekTrainings(weekOffsets, monthR){
-  const src=timedWeekTrainings();
+  const src=[...timedWeekTrainings()].sort((a,b)=>(isMonthPay(b)?1:0)-(isMonthPay(a)?1:0));
   if(!src.length){ setSchedStatus('Brak treningów z godziną w tym tygodniu.', true); return 0; }
   let added=0, skipped=0, outside=0;
   src.forEach(t=>{
@@ -2001,7 +2046,13 @@ function editScheduleTx(idx){
   const h=txHour(t);
   if(h!=null && SCHED_HOURS.includes(h)) schedHour=h;
   schedGuest=!!t.withGuest || t.src==='split';
-  schedPay=t.src==='split'?'split':(t.src==='bank'?'bank':'cash');
+  if(t.monthPay){
+    schedPay='month';
+    schedMonthSrc=t.src==='cash'?'cash':'bank';
+  } else {
+    schedPay=t.src==='split'?'split':(t.src==='bank'?'bank':'cash');
+    if(schedPay==='cash'||schedPay==='bank') schedMonthSrc=schedPay;
+  }
   renderSchedule();
   syncSchedForm();
   const nameEl=document.getElementById('sched-name');
@@ -2031,6 +2082,9 @@ function addScheduleEntry(){
   const time=hourEl && hourEl.value ? hourEl.value : hourLabel(SCHED_HOURS[0]);
   if(!client){ setSchedStatus('Podaj imię i nazwisko.', true); return; }
 
+  const month=isoToMonthLabel(iso);
+  const existingPay=monthPrepaidFor(client, month, schedEditIdx);
+  const coverExisting=!!existingPay && schedPay!=='month';
   const rec={
     id: Date.now(),
     date: isoToTxDate(iso),
@@ -2038,12 +2092,17 @@ function addScheduleEntry(){
     time,
     name: 'Plan treningowy — '+client,
     cat: 'Plan treningowy',
-    amt,
-    month: isoToMonthLabel(iso),
-    src: schedPay==='split'?'split':(schedPay==='bank'?'bank':'cash'),
+    amt: coverExisting?0:amt,
+    month,
+    src: schedPay==='split'?'split':(schedPay==='month'?(schedMonthSrc==='cash'?'cash':'bank'):(schedPay==='bank'?'bank':'cash')),
     withGuest: schedGuest || schedPay==='split',
-    planned: true
+    planned: true,
+    monthPay: schedPay==='month' && !coverExisting,
+    monthCovered: coverExisting
   };
+  if(schedPay==='month' && existingPay){
+    setSchedStatus('Ten klient ma już płatność za '+month+'. Wpisz zwykły trening — będzie jako opłacony.', true); return;
+  }
   if(schedPay==='split'){
     const cash=parseFloat(String((document.getElementById('sched-amt-cash')||{}).value||'').replace(',','.'));
     const bank=parseFloat(String((document.getElementById('sched-amt-bank')||{}).value||'').replace(',','.'));
@@ -2052,11 +2111,20 @@ function addScheduleEntry(){
     rec.bankAmt=round2(bank);
     rec.amt=round2(rec.cashAmt+rec.bankAmt);
     rec.withGuest=true;
+    rec.monthPay=false;
+    rec.monthCovered=false;
+  } else if(coverExisting){
+    rec.amt=0;
+    rec.monthCovered=true;
+    rec.monthPay=false;
+  } else if(schedPay==='month'){
+    if(!(amt>0)){ setSchedStatus('Podaj kwotę za cały miesiąc.', true); return; }
+    rec.monthPay=true;
+    rec.monthCovered=false;
   } else if(!(amt>0)){
     setSchedStatus('Podaj kwotę za trening.', true); return;
   }
 
-  const month=rec.month;
   const editing=schedEditIdx!=null && data[schedEditIdx] && isTrainingIncome(data[schedEditIdx]);
   if(editing && hasTrainingAt(iso, rec.time, client, schedEditIdx)){
     setSchedStatus('Ten trening już jest w '+rec.time+' · '+formatDayLabel(iso)+'.', true); return;
@@ -2079,7 +2147,11 @@ function addScheduleEntry(){
   const bankEl=document.getElementById('sched-amt-bank');
   if(cashEl) cashEl.value='';
   if(bankEl) bankEl.value='';
-  setSchedStatus((wasEdit?'✓ Zmieniono: ':'✓ Dodano do planu (jeszcze nie w zarobkach): ')+time+' '+client+' · '+fmt(rec.amt)+(rec.src==='split'?' · 💵'+fmt(rec.cashAmt)+' + 🏦'+fmt(rec.bankAmt):''));
+  let extra='';
+  if(rec.monthPay) extra=' · 📅 za miesiąc (nie w dniu)';
+  else if(rec.monthCovered) extra=' · opłacone z góry';
+  else if(rec.src==='split') extra=' · 💵'+fmt(rec.cashAmt)+' + 🏦'+fmt(rec.bankAmt);
+  setSchedStatus((wasEdit?'✓ Zmieniono: ':'✓ Dodano do planu (jeszcze nie w zarobkach): ')+time+' '+client+(rec.monthCovered?'':(' · '+fmt(rec.amt)))+extra);
   renderSidebar();
   renderSchedule();
 }
@@ -2089,14 +2161,23 @@ function confirmSchedDay(){
   if(!iso){ setSchedStatus('Wybierz dzień.', true); return; }
   const pending=trainingsInRange(iso,iso).filter(isTrainingPlanned);
   if(!pending.length){ setSchedStatus('Nie ma zaplanowanych treningów do zatwierdzenia.'); return; }
-  const total=sumTrainings(pending);
+  const dayAmt=sumTrainingDay(pending);
+  const monthAmt=pending.filter(isMonthPay).reduce((s,t)=>s+(t.amt||0),0);
   const dayLabel=formatDayLabel(iso);
-  if(!confirm('Zatwierdzić '+treningLabel(pending.length)+' z dnia '+dayLabel+' na '+fmt(total)+'?\n\nTylko potwierdzone treningi trafią do przychodów. Usuń wcześniej osoby, które nie przyszły.')) return;
+  let ask='Zatwierdzić '+treningLabel(pending.length)+' z dnia '+dayLabel+'?';
+  if(dayAmt) ask+='\n\nZa treningi tego dnia: '+fmt(dayAmt)+' → przychody.';
+  if(monthAmt) ask+='\nAbonament za miesiąc: '+fmt(monthAmt)+' → przychody miesiąca (nie doliczony do dnia).';
+  if(!dayAmt && !monthAmt) ask+='\n\nTe treningi są opłacone z góry — potwierdzasz tylko obecność.';
+  ask+='\n\nUsuń wcześniej osoby, które nie przyszły.';
+  if(!confirm(ask)) return;
   pending.forEach(t=>{ t.planned=false; });
   save();
   curMonth=isoToMonthLabel(iso);
   schedDate=iso;
-  setSchedStatus('✓ Zatwierdzono dzień — '+treningLabel(pending.length)+' ('+fmt(total)+') w przychodach.');
+  const toInc=dayAmt+monthAmt;
+  setSchedStatus(toInc
+    ? '✓ Zatwierdzono dzień — '+treningLabel(pending.length)+(dayAmt?' · treningi '+fmt(dayAmt):'')+(monthAmt?' · abonament '+fmt(monthAmt):'')+' w przychodach.'
+    : '✓ Zatwierdzono obecność — '+treningLabel(pending.length)+' (abonament, bez kwoty dnia).');
   renderSidebar();
   renderSchedule();
 }
@@ -2153,9 +2234,15 @@ function renderSchedule(){
       splitBtn.style.display=schedGuest || schedPay==='split' ? '' : 'none';
       splitBtn.classList.toggle('active', schedPay==='split');
     }
+    const monthBtn=document.getElementById('sched-pay-month');
+    if(monthBtn) monthBtn.classList.toggle('active', schedPay==='month');
   }
   const splitRow=document.getElementById('sched-split-row');
   if(splitRow) splitRow.style.display=schedPay==='split'?'':'none';
+  const amtLbl=document.getElementById('sched-amt-lbl');
+  if(amtLbl) amtLbl.textContent=schedPay==='month'?'Kwota za cały miesiąc (zł)':'Kwota za trening (zł)';
+  const monthHint=document.getElementById('sched-month-hint');
+  if(monthHint) monthHint.style.display=schedPay==='month'?'':'none';
   updateSchedFormMode();
 
   const dayR=schedRange(schedDate,'day');
@@ -2165,14 +2252,18 @@ function renderSchedule(){
   const weekList=trainingsInRange(weekR.from, weekR.to);
   const monthList=trainingsInRange(monthR.from, monthR.to);
 
-  const dayEarned=sumTrainings(dayList.filter(t=>!isTrainingPlanned(t)));
-  const weekEarned=sumTrainings(weekList.filter(t=>!isTrainingPlanned(t)));
-  const monthEarned=sumTrainings(monthList.filter(t=>!isTrainingPlanned(t)));
-  document.getElementById('sched-sum-day').textContent=fmt(sumTrainings(dayList));
-  document.getElementById('sched-sum-day-n').textContent=treningLabel(dayList.length)+' · '+formatDayLabel(schedDate)+' · w przychodach: '+fmt(dayEarned);
-  document.getElementById('sched-sum-week').textContent=fmt(sumTrainings(weekList));
+  const dayEarned=sumTrainingDay(dayList.filter(t=>!isTrainingPlanned(t)));
+  const weekEarned=sumTrainingDay(weekList.filter(t=>!isTrainingPlanned(t)));
+  const monthEarned=sumTrainingMonth(monthList.filter(t=>!isTrainingPlanned(t)));
+  const dayPlan=sumTrainingDay(dayList);
+  const weekPlan=sumTrainingDay(weekList);
+  const monthPlan=sumTrainingMonth(monthList);
+  const dayMonthPay=dayList.filter(isMonthPay).reduce((s,t)=>s+(t.amt||0),0);
+  document.getElementById('sched-sum-day').textContent=fmt(dayPlan);
+  document.getElementById('sched-sum-day-n').textContent=treningLabel(dayList.length)+' · '+formatDayLabel(schedDate)+' · w przychodach: '+fmt(dayEarned)+(dayMonthPay?' · abonament '+fmt(dayMonthPay)+' w miesiącu':'');
+  document.getElementById('sched-sum-week').textContent=fmt(weekPlan);
   document.getElementById('sched-sum-week-n').textContent=treningLabel(weekList.length)+' · '+weekR.label+' · w przychodach: '+fmt(weekEarned);
-  document.getElementById('sched-sum-month').textContent=fmt(sumTrainings(monthList));
+  document.getElementById('sched-sum-month').textContent=fmt(monthPlan);
   document.getElementById('sched-sum-month-n').textContent=treningLabel(monthList.length)+' · '+monthR.label+' · w przychodach: '+fmt(monthEarned);
   const confirmBtn=document.getElementById('sched-confirm-day-btn');
   const pendingDay=dayList.filter(isTrainingPlanned);
@@ -2226,7 +2317,7 @@ function renderSchedule(){
     untimedEl.style.display='block';
     untimedEl.innerHTML = 'Bez godziny — przeciągnij na kratkę: '+untimed.map(t=>{
       const idx=data.indexOf(t);
-      return `<span class="cal-chip${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})">${scheduleClientName(t)} ${fmt(t.amt)} <button class="tx-del" style="opacity:1;display:inline" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button></span>`;
+      return `<span class="cal-chip${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isMonthCovered(t)?' covered':''}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})">${scheduleClientName(t)} ${isMonthCovered(t)?'opłacone':fmt(t.amt)} <button class="tx-del" style="opacity:1;display:inline" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button></span>`;
     }).join(' ');
   } else { untimedEl.style.display='none'; untimedEl.innerHTML=''; }
 
@@ -2235,7 +2326,7 @@ function renderSchedule(){
   weekDays.forEach((iso,i)=>{
     const d=parseISODate(iso);
     const dayItems=trainingsInRange(iso,iso);
-    const dayEarn=sumTrainings(dayItems);
+    const dayEarn=sumTrainingDay(dayItems);
     const dayPending=dayItems.some(isTrainingPlanned);
     const dayConfirmed=dayItems.length && !dayPending;
     html+=`<div class="cal-h${iso===today?' today':''}${iso===schedDate?' sel':''}" onclick="selectSchedDay('${iso}')">
@@ -2252,10 +2343,10 @@ function renderSchedule(){
         const idx=data.indexOf(t);
         const col=clientColor(scheduleClientName(t));
         const nm=scheduleClientName(t);
-        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="Kliknij, żeby edytować · przeciągnij, żeby skopiować">
+        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isMonthCovered(t)?' covered':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="Kliknij, żeby edytować · przeciągnij, żeby skopiować">
           <button class="cs-del" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
           <span class="cs-name">${hourLabel(h)} ${nm}</span>
-          <span class="cs-amt">${fmt(t.amt)} · ${schedPayHint(t)}</span>
+          <span class="cs-amt">${isMonthCovered(t)?'opłacone':fmt(t.amt)} · ${schedPayHint(t)}</span>
         </div>`;
       }).join('');
       const cls='cal-cell'+(iso===schedDate && h===schedHour?' sel':'')+(iso===today && h===nowH?' now':'');
@@ -2318,7 +2409,7 @@ function renderTx(){
 
   document.getElementById('tx-sub').textContent = curMonth;
 
-  const txM = data.filter(t=>t.month===curMonth && t.planned!==true);
+  const txM = data.filter(t=>t.month===curMonth && t.planned!==true && t.monthCovered!==true);
   // Fill filters
   const cats = [...new Set(txM.map(t=>t.cat))].sort();
   const cf=document.getElementById('tx-cat');
