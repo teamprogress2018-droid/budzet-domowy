@@ -133,6 +133,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .imp-drop.over{border-color:var(--accent);background:var(--green-bg)}
 .imp-drop textarea{min-height:170px;border:none;background:transparent;display:block}
 .imp-drop textarea:focus{background:transparent}
+.rcp-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.rcp-actions label.btn-p,.rcp-actions label.btn-s{display:inline-flex;align-items:center;justify-content:center}
+.rcp-thumb{display:none;margin:10px 0 4px}
+.rcp-thumb img{max-width:100%;max-height:180px;border-radius:var(--rsm);border:1px solid var(--border);object-fit:contain;background:var(--bg2)}
+@media(max-width:768px){
+  .rcp-actions{flex-direction:column}
+  .rcp-actions label.btn-p,.rcp-actions label.btn-s{width:100%;padding:12px 18px;box-sizing:border-box}
+}
 .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--accent);background:var(--card)}
 .fg-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .factions{display:flex;gap:8px;align-items:center;margin-top:14px}
@@ -789,7 +797,46 @@ body.sched-dragging{touch-action:none;user-select:none}
 
 <!-- ADD / IMPORT -->
 <div class="page" id="page-add">
-  <div class="ph"><div class="ph-left"><h2>Dodaj / Importuj</h2><p>Ręczne dodanie lub import z banku</p></div></div>
+  <div class="ph"><div class="ph-left"><h2>Dodaj / Importuj</h2><p>Skan paragonu, ręczne dodanie albo import z banku</p></div></div>
+
+  <!-- RECEIPT SCAN -->
+  <div class="card form-card" style="margin-bottom:16px">
+    <div class="sec-lbl">📸 Zeskanuj paragon</div>
+    <div class="tip">Zrób zdjęcie telefonem albo wybierz z galerii. Odczytam sklep, datę i <strong>sumę</strong> — sprawdzisz i wrzucę jeden wydatek, nie każdą pozycję z paragonu.</div>
+    <div class="rcp-actions">
+      <label class="btn-p" style="margin:0;cursor:pointer">Zrób zdjęcie
+        <input id="rcp-camera" type="file" accept="image/*" capture="environment" hidden onchange="scanReceiptFile(this)">
+      </label>
+      <label class="btn-s" style="margin:0;cursor:pointer">Z galerii
+        <input id="rcp-gallery" type="file" accept="image/*" hidden onchange="scanReceiptFile(this)">
+      </label>
+    </div>
+    <div class="rcp-thumb" id="rcp-thumb"><img id="rcp-thumb-img" alt="Zdjęcie paragonu"></div>
+    <span class="fstatus" id="rcp-status"></span>
+    <div id="rcp-review" style="display:none;margin-top:12px">
+      <div class="frow">
+        <div class="fg"><label>Sklep / nazwa</label><input id="rcp-name" placeholder="np. Biedronka" oninput="syncReceiptCatFromName()"></div>
+        <div class="fg"><label>Suma (zł)</label><input id="rcp-amt" placeholder="np. 47,23"></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>Kategoria</label><select id="rcp-cat"></select></div>
+        <div class="fg"><label>Płatność</label>
+          <select id="rcp-src">
+            <option value="cash">💵 Gotówka</option>
+            <option value="bank">🏦 Karta / przelew</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>Data</label><input id="rcp-date" placeholder="np. 07.09.2026" oninput="syncReceiptMonthFromDate()"></div>
+        <div class="fg"><label>Miesiąc</label><input id="rcp-month" placeholder="np. Wrzesień 2026"></div>
+      </div>
+      <div class="factions">
+        <button type="button" class="btn-p" onclick="confirmReceipt()">Dodaj do wydatków</button>
+        <button type="button" class="btn-s" onclick="clearReceiptScan()">Anuluj</button>
+      </div>
+    </div>
+  </div>
 
   <!-- QUICK ADD -->
   <div class="card form-card" style="margin-bottom:16px">
@@ -847,10 +894,8 @@ body.sched-dragging{touch-action:none;user-select:none}
   <div class="card form-card" style="margin-bottom:16px">
     <div class="sec-lbl">📄 Import wyciągu Santander PDF</div>
     <div class="tip">
-      <strong>Jak importować:</strong> wklej <strong>zrzut ekranu</strong> z aplikacji banku (Ctrl+V) albo zdjęcie z WhatsApp — odczytam tekst ze zdjęcia.<br>
-      Albo w PDF zaznacz tekst → <strong>Ctrl+C</strong> → <strong>Wklej ze schowka</strong>. Możesz też upuścić plik <strong>.txt / .jpg / .png</strong>.
-      <strong>Jak importować:</strong> w PDF zaznacz tekst → <strong>Ctrl+C</strong> (Mac: <strong>Cmd+C</strong>) → kliknij pole poniżej → <strong>Ctrl+V</strong> albo przycisk <strong>Wklej ze schowka</strong>.<br>
-      Przeciąganie z okna PDF często nie działa — wtedy wklej. Możesz też upuścić plik <strong>.txt</strong>. Miesiąc wykryje się sam (ING, PKO, Revolut też).
+      <strong>Wyciąg z banku:</strong> wklej zrzut ekranu (Ctrl+V), zdjęcie z galerii albo tekst z PDF. Miesiąc wykryje się sam (Santander, ING, PKO, Revolut).<br>
+      Paragon fiskalny lepiej wrzucić wyżej — „Zeskanuj paragon” — wtedy trafia jako <strong>jeden wydatek</strong>.
     </div>
     <div class="frow f1">
       <div class="fg"><label>Miesiąc (auto-wykrywany lub wpisz ręcznie)</label>
@@ -868,8 +913,6 @@ body.sched-dragging{touch-action:none;user-select:none}
       <button type="button" class="btn-p" onclick="pasteImportClipboard()">Wklej ze schowka</button>
       <label class="btn-s" style="margin:0;cursor:pointer">Wybierz plik / zdjęcie
         <input id="imp-file" type="file" accept=".txt,.csv,text/plain,image/*,.jpg,.jpeg,.png,.webp,.gif" hidden onchange="loadImportFile(this)">
-      <label class="btn-s" style="margin:0;cursor:pointer">Wybierz plik .txt
-        <input id="imp-file" type="file" accept=".txt,.csv,text/plain" hidden onchange="loadImportFile(this)">
       </label>
     </div>
     <div class="frow">
@@ -2826,29 +2869,184 @@ function loadTesseract(){
   });
   return loadTesseract.p;
 }
-async function ocrImportImage(fileOrBlob, label){
-  const st=document.getElementById('imp-status');
+function prepImageForOcr(fileOrBlob){
+  return new Promise(resolve=>{
+    const url=URL.createObjectURL(fileOrBlob);
+    const img=new Image();
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const max=1600;
+      let w=img.width, h=img.height;
+      if(w>max || h>max){
+        const s=max/Math.max(w,h);
+        w=Math.round(w*s); h=Math.round(h*s);
+      }
+      const c=document.createElement('canvas');
+      c.width=w; c.height=h;
+      const ctx=c.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      try{
+        const id=ctx.getImageData(0,0,w,h);
+        const d=id.data;
+        for(let i=0;i<d.length;i+=4){
+          let g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+          g=Math.max(0,Math.min(255,(g-128)*1.35+128));
+          d[i]=d[i+1]=d[i+2]=g;
+        }
+        ctx.putImageData(id,0,0);
+      }catch(e){}
+      c.toBlob(b=>resolve(b||fileOrBlob),'image/png');
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); resolve(fileOrBlob); };
+    img.src=url;
+  });
+}
+async function ocrImportImage(fileOrBlob, label, opts){
+  const asReceipt=!!(opts && opts.asReceipt);
+  const st=document.getElementById(asReceipt?'rcp-status':'imp-status');
   const ta=document.getElementById('imp-text');
-  if(st){ st.textContent='⏳ Odczytuję zdjęcie rachunku… to może chwilę zająć'; st.className='fstatus'; }
-  if(ta && looksLikeBinaryGarbage(ta.value)) ta.value='';
+  if(st){ st.textContent='⏳ Odczytuję '+(asReceipt?'paragon':'zdjęcie')+'… to może chwilę zająć'; st.className='fstatus'; }
+  if(!asReceipt && ta && looksLikeBinaryGarbage(ta.value)) ta.value='';
   try{
+    const prepared=await prepImageForOcr(fileOrBlob);
     const T=await loadTesseract();
-    const result=await T.recognize(fileOrBlob, 'pol+eng', {
+    const result=await T.recognize(prepared, 'pol+eng', {
       logger:m=>{
         if(st && m && m.status==='recognizing text'){
-          st.textContent='⏳ Odczytuję zdjęcie… '+Math.round((m.progress||0)*100)+'%';
+          st.textContent='⏳ Odczytuję '+(asReceipt?'paragon':'zdjęcie')+'… '+Math.round((m.progress||0)*100)+'%';
         }
       }
     });
     const text=String(result&&result.data&&result.data.text||'').trim();
     if(!text || text.length<8){
-      if(st){ st.textContent='Nie odczytałem tekstu ze zdjęcia. Zrób wyraźniejszy zrzut albo skopiuj tekst z PDF.'; st.className='fstatus err'; }
+      if(st){ st.textContent='Nie odczytałem tekstu ze zdjęcia. Zrób ostrzejsze zdjęcie przy dobrym świetle, bez błysku.'; st.className='fstatus err'; }
+      return;
+    }
+    if(asReceipt || looksLikeReceipt(text)){
+      presentReceiptReview(text);
+      if(!asReceipt) setImportText(text, '✓ Odczytano paragon'+(label?': '+label:'')+' — sprawdź sumę i dodaj do wydatków');
       return;
     }
     setImportText(text, '✓ Odczytano ze zdjęcia'+(label?': '+label:'')+' — sprawdź i kliknij Importuj');
   }catch(err){
-    if(st){ st.textContent='Nie udało się odczytać zdjęcia. Wklej tekst skopiowany z wyciągu PDF.'; st.className='fstatus err'; }
+    if(st){ st.textContent='Nie udało się odczytać zdjęcia. Wklej tekst albo zrób wyraźniejsze zdjęcie.'; st.className='fstatus err'; }
   }
+}
+function fillReceiptCatSelect(selected){
+  const sel=document.getElementById('rcp-cat');
+  if(!sel) return;
+  const cats=(typeof EXP_CATS!=='undefined'?EXP_CATS:EXP_CATS_PERSONAL).slice();
+  if(selected && !cats.includes(selected)) cats.unshift(selected);
+  const pick=selected || 'Inne';
+  sel.innerHTML=cats.map(c=>`<option${c===pick?' selected':''}>${c}</option>`).join('');
+}
+function showReceiptThumb(fileOrBlob){
+  const wrap=document.getElementById('rcp-thumb');
+  const img=document.getElementById('rcp-thumb-img');
+  if(!wrap||!img||!fileOrBlob) return;
+  if(showReceiptThumb.url) URL.revokeObjectURL(showReceiptThumb.url);
+  showReceiptThumb.url=URL.createObjectURL(fileOrBlob);
+  img.src=showReceiptThumb.url;
+  wrap.style.display='block';
+}
+function presentReceiptReview(text){
+  const parsed=parseReceipt(text, (document.getElementById('rcp-month')||{}).value || (document.getElementById('imp-month')||{}).value || curMonth);
+  const dated=parseReceiptDate(text);
+  const name=parsed[0]?parsed[0].name:parseReceiptMerchant(text);
+  const amt=parsed[0]?Math.abs(parsed[0].amt):'';
+  const month=parsed[0]?parsed[0].month:(dated&&dated.month)||curMonth;
+  const date=parsed[0]?parsed[0].date:(dated&&dated.date)||'';
+  const cat=parsed[0]?parsed[0].cat:guessCat(name,false);
+  document.getElementById('rcp-name').value=name||'';
+  document.getElementById('rcp-amt').value=amt===''?'':String(amt).replace('.',',');
+  document.getElementById('rcp-date').value=dated&&dated.iso?dated.iso.split('-').reverse().join('.'):(date||'');
+  document.getElementById('rcp-month').value=month||curMonth;
+  fillReceiptCatSelect(cat);
+  document.getElementById('rcp-review').style.display='block';
+  const st=document.getElementById('rcp-status');
+  if(st){
+    st.textContent=amt
+      ? 'Sprawdź sklep i kwotę, potem dodaj do wydatków'
+      : 'Nie znalazłem sumy na paragonie — wpisz kwotę ręcznie';
+    st.className=amt?'fstatus':'fstatus err';
+  }
+  try{ document.getElementById('rcp-review').scrollIntoView({block:'nearest',behavior:'smooth'}); }catch(e){}
+}
+function syncReceiptCatFromName(){
+  const name=document.getElementById('rcp-name');
+  const cat=document.getElementById('rcp-cat');
+  if(!name||!cat) return;
+  const guessed=guessCat(name.value, false);
+  if(guessed && guessed!=='Inne'){
+    if(![...cat.options].some(o=>o.value===guessed)) cat.insertAdjacentHTML('afterbegin', `<option value="${guessed}">${guessed}</option>`);
+    cat.value=guessed;
+  }
+}
+function syncReceiptMonthFromDate(){
+  const dateEl=document.getElementById('rcp-date');
+  const monthEl=document.getElementById('rcp-month');
+  if(!dateEl||!monthEl) return;
+  const parsed=parseTxDateFields(dateEl.value, monthEl.value||curMonth);
+  if(parsed && parsed.month) monthEl.value=parsed.month;
+}
+function scanReceiptFile(input){
+  const f=input.files && input.files[0];
+  input.value='';
+  if(!f) return;
+  showReceiptThumb(f);
+  ocrImportImage(f, f.name||'paragon', {asReceipt:true});
+}
+function clearReceiptScan(){
+  document.getElementById('rcp-review').style.display='none';
+  const wrap=document.getElementById('rcp-thumb');
+  if(wrap) wrap.style.display='none';
+  if(showReceiptThumb.url){ URL.revokeObjectURL(showReceiptThumb.url); showReceiptThumb.url=null; }
+  const st=document.getElementById('rcp-status');
+  if(st) st.textContent='';
+  ['rcp-name','rcp-amt','rcp-date'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+}
+function confirmReceipt(){
+  const name=document.getElementById('rcp-name').value.trim()||'Paragon';
+  const amtRaw=document.getElementById('rcp-amt').value.replace(/\s/g,'').replace(',','.');
+  const statusEl=document.getElementById('rcp-status');
+  let amt=parseFloat(amtRaw);
+  if(!amtRaw || isNaN(amt) || !(amt>0)){
+    statusEl.textContent='Wpisz sumę z paragonu.';
+    statusEl.className='fstatus err';
+    return;
+  }
+  const dateRaw=document.getElementById('rcp-date').value.trim();
+  const monthRaw=document.getElementById('rcp-month').value.trim()||curMonth;
+  const parsed=parseTxDateFields(dateRaw || new Date().toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'}), monthRaw);
+  const cat=document.getElementById('rcp-cat').value||'Inne';
+  const src=document.getElementById('rcp-src').value||'cash';
+  const tx={
+    date: parsed.date,
+    iso: parsed.iso,
+    name,
+    cat,
+    amt: -Math.abs(amt),
+    month: parsed.month,
+    src,
+    id: Date.now(),
+    fromReceipt: true
+  };
+  const key=`${tx.month}|${tx.date}|${tx.name}|${tx.amt}`;
+  const exists=data.some(t=>`${normalizeMonthLabel(t.month)||t.month}|${t.date}|${t.name}|${t.amt}`===key);
+  if(exists){
+    statusEl.textContent='Taki wydatek już jest w tym miesiącu.';
+    statusEl.className='fstatus err';
+    return;
+  }
+  data.push(tx);
+  save();
+  curMonth=parsed.month;
+  renderSidebar();
+  statusEl.textContent=`✓ Dodano paragon: ${name} (${fmt(-Math.abs(amt),true)}) · ${parsed.month}`;
+  statusEl.className='fstatus';
+  document.getElementById('rcp-review').style.display='none';
+  setTimeout(()=>{ if(statusEl.textContent.startsWith('✓')) statusEl.textContent=''; },5000);
+  renderPage();
 }
 function htmlToPlain(html){
   const d=document.createElement('div');
@@ -3052,7 +3250,7 @@ function readImportFile(f){
 // IMPORT (Santander PDF + generic)
 // ═══════════════════════════════════════════════════
 const CAT_KW = {
-  'Spożywcze':['biedronka','lidl','kaufland','aldi','carrefour','zabka','stokrotka','tesco','netto','spar','frisco'],
+  'Spożywcze':['biedronka','lidl','kaufland','aldi','carrefour','zabka','stokrotka','tesco','netto','spar','frisco','dino','lewiat','auchan','intermarche'],
   'Paliwo':['orlen','bp ','shell','lotos','circle k','paliwo','orlenpay'],
   'Jedzenie poza domem':['mcdonalds','burger','kfc','pizza','kebab','subway','starbucks','restaura','pyszne'],
   'Subskrypcje':['netflix','spotify','apple.com','google one','canva','speechify','disney','youtube','hbo','openai'],
@@ -3070,13 +3268,93 @@ const CAT_KW = {
 
 function guessCat(name, isInc){
   if(isInc) return 'Przychód bankowy';
-  const low=name.toLowerCase();
-  for(const [cat,kws] of Object.entries(CAT_KW)){ if(kws.some(k=>low.includes(k))) return cat; }
-  return document.getElementById('imp-defcat').value;
+  const low=foldPl(name);
+  for(const [cat,kws] of Object.entries(CAT_KW)){ if(kws.some(k=>low.includes(foldPl(k)))) return cat; }
+  const def=document.getElementById('rcp-cat') && document.getElementById('rcp-review') && document.getElementById('rcp-review').style.display!=='none'
+    ? document.getElementById('rcp-cat')
+    : document.getElementById('imp-defcat');
+  return (def && def.value) || 'Inne';
 }
 
-function parseAmt(s){ return parseFloat(s.trim().replace(/\s/g,'').replace(',','.')); }
+function parseAmt(s){ return parseFloat(String(s||'').trim().replace(/\s/g,'').replace(',','.')); }
 function fmtShort(ds){ const m=ds.match(/(\d{1,2})\.(\d{2})\.(\d{4})/); if(!m) return ds; return m[1].padStart(2,'0')+'.'+m[2]; }
+
+function looksLikeBankLedger(text){
+  const t=String(text||'');
+  return /\d{1,2}\.\d{2}\.\d{4}\s+\d{1,2}\.\d{2}\.\d{4}/.test(t)
+    || /historia operacj|wyci[aą]g z (konta|rachunku)|santander bank|ing bank|pko bp|revolut/i.test(t);
+}
+function looksLikeReceipt(text){
+  const t=String(text||'');
+  if(!t.trim()) return false;
+  if(looksLikeBankLedger(t)) return false;
+  return /paragon|fiskaln|\bnip\b|sprzeda[zż] opodatkowana|do zapłaty|do zaplaty|suma\s*(pln|zł|zl)?|ptu\s*[abc]|kasa fiskalna/i.test(t);
+}
+function parseReceiptTotal(text){
+  const t=String(text||'').replace(/\u00a0/g,' ');
+  const labeled=/((?:suma(?:\s*(?:pln|zł|zl))?|razem(?:\s*(?:do\s*zapłaty)?)?|do\s+zapłaty|do\s+zaplaty|kwota\s+do\s+zapłaty|total)\s*[:.]?\s*)(\d{1,4}(?:\s?\d{3})*[.,]\d{2})/ig;
+  let last=null, m;
+  while((m=labeled.exec(t))) last=m[2];
+  if(last){
+    const n=parseAmt(last);
+    if(n>0) return n;
+  }
+  const next=t.match(/(?:suma(?:\s*(?:pln|zł|zl))?|do\s+zapłaty|do\s+zaplaty)\s*[:.]?\s*\n\s*(\d{1,4}(?:\s?\d{3})*[.,]\d{2})/i);
+  if(next){
+    const n=parseAmt(next[1]);
+    if(n>0) return n;
+  }
+  return null;
+}
+function parseReceiptDate(text){
+  const t=String(text||'');
+  const iso=t.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  if(iso){
+    const mi=parseInt(iso[2],10)-1;
+    if(mi>=0 && mi<=11) return {date:iso[3]+'.'+iso[2], month:MONTHS_PL[mi]+' '+iso[1], iso:iso[1]+'-'+iso[2]+'-'+iso[3]};
+  }
+  const dmy=t.match(/\b(\d{1,2})[./-](\d{2})[./-](20\d{2})\b/);
+  if(dmy){
+    const dd=String(dmy[1]).padStart(2,'0'), mm=dmy[2];
+    const mi=parseInt(mm,10)-1;
+    if(mi>=0 && mi<=11) return {date:dd+'.'+mm, month:MONTHS_PL[mi]+' '+dmy[3], iso:dmy[3]+'-'+mm+'-'+dd};
+  }
+  return null;
+}
+function parseReceiptMerchant(text){
+  const skip=/paragon|fiskaln|nip|regon|kasa|sprzeda|ptu|vat|ul\.|ulica|os\.|data|godz|nabywca|sprzedawca|pozycj|numer|transakcj|terminal|karta|blik|got[oó]wka|dzięk|zaprasz|www\.|http|nr\s*sys|wydruk|suma|razem|zapłat/i;
+  const lines=String(text||'').split(/\n/).map(l=>l.trim()).filter(l=>l.length>=3);
+  for(const l of lines.slice(0,14)){
+    if(skip.test(l)) continue;
+    if(/^[\d\s./:-]+$/.test(l)) continue;
+    if(l.length>48) continue;
+    let name=l.replace(/\s{2,}/g,' ');
+    name=name.replace(/\s+(sp\.?\s*z\s*o\.?\s*o\.?|s\.?a\.?)\.?$/i,'').trim();
+    if(name.length>=2) return name.slice(0,60);
+  }
+  return 'Paragon';
+}
+function parseReceipt(text, monthHint){
+  const total=parseReceiptTotal(text);
+  const dated=parseReceiptDate(text);
+  const name=parseReceiptMerchant(text);
+  const month=normalizeMonthLabel(monthHint||'') || (dated && dated.month) || curMonth;
+  const date=dated ? dated.date : (function(){
+    const canon=normalizeMonthLabel(month)||month||'';
+    const mi=MONTHS_PL.indexOf(canon.split(' ')[0]);
+    return '01.'+String((mi>=0?mi:new Date().getMonth())+1).padStart(2,'0');
+  })();
+  if(!(total>0)) return [];
+  return [{
+    date,
+    name,
+    cat: guessCat(name, false),
+    amt: -Math.abs(total),
+    month,
+    src: 'cash',
+    fromReceipt: true
+  }];
+}
 
 function detectMonth(text){
   const m=text.match(/za okres od:?\s*[\d.]+\s*r?\.\s*do:?\s*(\d{1,2})\.(\d{2})\.(\d{4})/i);
@@ -3201,7 +3479,17 @@ function doImport(){
   document.getElementById('imp-month').value=month;
 
   const isSant=/\d{1,2}\.\d{2}\.\d{4}\s+\d{1,2}\.\d{2}\.\d{4}/.test(text);
-  const results=isSant?parseSantander(text,month):parseGeneric(text,month);
+  let results;
+  if(isSant) results=parseSantander(text,month);
+  else if(looksLikeReceipt(text)){
+    results=parseReceipt(text,month);
+    if(!results.length){
+      presentReceiptReview(text);
+      statusEl.textContent='To wygląda na paragon, ale nie znalazłem sumy. Wpisz kwotę wyżej i dodaj do wydatków.';
+      statusEl.className='fstatus err';
+      return;
+    }
+  } else results=parseGeneric(text,month);
 
   // Policz pominięte transfery wewnętrzne
   const skipCount = isSant ? (text.match(/sp.ata karty kredytowej/gi)||[]).length : 0;
