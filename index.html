@@ -854,7 +854,7 @@ body.sched-dragging{touch-action:none;user-select:none}
     </div>
     <div class="frow f1">
       <div class="fg"><label>Miesiąc (auto-wykrywany lub wpisz ręcznie)</label>
-        <input type="text" id="imp-month" placeholder="Auto-wykrywany z wyciągu lub wpisz: Maj 2026">
+        <input type="text" id="imp-month" placeholder="np. Wrzesień 2026 (można bez polskich znaków)">
       </div>
     </div>
     <div class="frow f1">
@@ -1182,8 +1182,69 @@ let charts = {};
 function save(){ try{ localStorage.setItem('budzet_v3', JSON.stringify(data)); }catch(e){} }
 
 const MONTHS_PL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
-function mIdx(s){ const p=s.split(' '); return parseInt(p[1])*12+MONTHS_PL.indexOf(p[0]); }
+const MONTHS_PL_GEN_ASCII = ['stycznia','lutego','marca','kwietnia','maja','czerwca','lipca','sierpnia','wrzesnia','pazdziernika','listopada','grudnia'];
+function foldPl(s){
+  return String(s||'')
+    .toLowerCase()
+    .replace(/ł/g,'l')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim();
+}
+function normalizeMonthLabel(s){
+  const raw=String(s||'').trim();
+  if(!raw) return '';
+  const folded=foldPl(raw);
+  let name='', year='';
+  let m=folded.match(/^([a-z]+)\s+(\d{4})$/) || folded.match(/^(\d{1,2})\s+(\d{4})$/);
+  if(m){ name=m[1]; year=m[2]; }
+  else if((m=folded.match(/^([a-z]+)$/))){
+    name=m[1];
+    year=String((String(curMonth||'').match(/(\d{4})/)||[])[1]||new Date().getFullYear());
+  }
+  if(!name) return '';
+  let mi=-1;
+  if(/^\d+$/.test(name)) mi=parseInt(name,10)-1;
+  else {
+    mi=MONTHS_PL.map(foldPl).indexOf(name);
+    if(mi<0) mi=MONTHS_PL_GEN_ASCII.indexOf(name);
+  }
+  if(mi<0||mi>11||!/^\d{4}$/.test(year)) return '';
+  return MONTHS_PL[mi]+' '+year;
+}
+function mIdx(s){
+  const n=normalizeMonthLabel(s)||String(s||'');
+  const p=n.split(' ');
+  const mi=MONTHS_PL.indexOf(p[0]);
+  const y=parseInt(p[1],10)||0;
+  return y*12+(mi<0?0:mi);
+}
 function getMonths(){ return [...new Set(data.map(t=>t.month))].sort((a,b)=>mIdx(a)-mIdx(b)); }
+function migrateMonthLabels(){
+  let n=0;
+  data.forEach(t=>{
+    const canon=normalizeMonthLabel(t.month);
+    if(canon && t.month!==canon){ t.month=canon; n++; }
+  });
+  const canonCur=normalizeMonthLabel(curMonth);
+  if(canonCur) curMonth=canonCur;
+  try{
+    const raw=localStorage.getItem('budzet_subs');
+    if(raw){
+      const subs=JSON.parse(raw);
+      let changed=false;
+      (subs||[]).forEach(s=>{
+        if(!Array.isArray(s.skipped)) return;
+        const next=[...new Set(s.skipped.map(m=>normalizeMonthLabel(m)||m))];
+        if(next.join('\0')!==s.skipped.join('\0')){ s.skipped=next; changed=true; }
+      });
+      if(changed) localStorage.setItem('budzet_subs', JSON.stringify(subs));
+    }
+  }catch(e){}
+  if(n) save();
+  return n;
+}
 
 function fmt(v, sign=false){
   const s = Math.abs(v).toLocaleString('pl-PL',{minimumFractionDigits:2,maximumFractionDigits:2})+' zł';
@@ -1552,8 +1613,8 @@ function txToISO(t){
   const dd=String(parseInt(parts[0],10)||0).padStart(2,'0');
   const mm=parts[1] ? String(parseInt(parts[1],10)||0).padStart(2,'0') : '';
   const mp=t.month.split(' ');
-  const year=mp[1];
-  const mi=MONTHS_PL.indexOf(mp[0]);
+  const year=(normalizeMonthLabel(t.month)||t.month).split(' ')[1] || mp[1];
+  const mi=MONTHS_PL.indexOf((normalizeMonthLabel(t.month)||'').split(' ')[0]);
   if(!dd||!mm||mi<0||!year) return '';
   return year+'-'+mm+'-'+dd;
 }
@@ -2623,7 +2684,7 @@ function parseTxDateFields(dateStr, monthStr){
   const raw=String(dateStr||'').trim();
   const hit=raw.match(/^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?$/);
   let day=null, monthIndex=null, year=null;
-  const mp=String(monthStr||curMonth||'').split(' ');
+  const mp=String(normalizeMonthLabel(monthStr||curMonth)||monthStr||curMonth||'').split(' ');
   const fromLabel=MONTHS_PL.indexOf(mp[0]);
   const yearFromLabel=parseInt(mp[1],10);
   if(fromLabel>=0) monthIndex=fromLabel;
@@ -2999,6 +3060,19 @@ function detectMonth(text){
   if(m) return MONTHS_PL[parseInt(m[2])-1]+' '+m[3];
   const d=text.match(/data wyci[aą]gu\s+(\d{1,2})\.(\d{2})\.(\d{4})/i);
   if(d) return MONTHS_PL[parseInt(d[2])-1]+' '+d[3];
+  const named=String(text||'').match(/([A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]+)\s+(20\d{2})/g);
+  if(named){
+    for(let i=named.length-1;i>=0;i--){
+      const n=normalizeMonthLabel(named[i]);
+      if(n) return n;
+    }
+  }
+  const dm=String(text||'').match(/(\d{1,2})\.(\d{2})\.(\d{4})/g);
+  if(dm && dm.length){
+    const last=dm[dm.length-1].match(/(\d{1,2})\.(\d{2})\.(\d{4})/);
+    const mi=parseInt(last[2],10)-1;
+    if(last && mi>=0 && mi<=11) return MONTHS_PL[mi]+' '+last[3];
+  }
   return null;
 }
 
@@ -3076,11 +3150,12 @@ function parseGeneric(text, month){
     const before=line.slice(0,last.index);
     if(before.includes('-')&&amt>0) amt=-amt;
     const dm=line.match(dateRe);
-    const date=dm?dm[1].replace('/','.'):'01.'+String(MONTHS_PL.indexOf(month.split(' ')[0])+1).padStart(2,'0');
+    const canonMonth=normalizeMonthLabel(month)||month;
+    const date=dm?dm[1].replace('/','.'):'01.'+String(MONTHS_PL.indexOf(canonMonth.split(' ')[0])+1).padStart(2,'0');
     let name=before.replace(dateRe,'').replace(/^[-+\s]+/,'').trim().replace(/\s{2,}/g,' ');
     if(name.length<2) name='Transakcja';
     if(name.length>60) name=name.slice(0,60);
-    results.push({date,name,cat:guessCat(name,amt>0),amt,month,src:'bank'});
+    results.push({date,name,cat:guessCat(name,amt>0),amt,month:canonMonth,src:'bank'});
   });
   return results;
 }
@@ -3095,12 +3170,12 @@ function doImport(){
     return;
   }
 
-  // Miesiąc: pole ręczne ma ZAWSZE priorytet nad auto-detekcją
+  // Miesiąc: pole ręczne ma ZAWSZE priorytet nad auto-detekcją; zawsze kanoniczna nazwa (Wrzesień 2026, nie "wrzesien 2026")
   const inputM=document.getElementById('imp-month').value.trim();
   const autoM=detectMonth(text);
-  const month=inputM||autoM;
-  if(!month){ statusEl.textContent='Wpisz miesiąc (np. Maj 2026).'; statusEl.className='fstatus err'; return; }
-  if(!inputM&&autoM) document.getElementById('imp-month').value=autoM;
+  const month=normalizeMonthLabel(inputM||autoM||'');
+  if(!month){ statusEl.textContent='Wpisz miesiąc (np. Wrzesień 2026).'; statusEl.className='fstatus err'; return; }
+  document.getElementById('imp-month').value=month;
 
   const isSant=/\d{1,2}\.\d{2}\.\d{4}\s+\d{1,2}\.\d{2}\.\d{4}/.test(text);
   const results=isSant?parseSantander(text,month):parseGeneric(text,month);
@@ -3108,7 +3183,7 @@ function doImport(){
   // Policz pominięte transfery wewnętrzne
   const skipCount = isSant ? (text.match(/sp.ata karty kredytowej/gi)||[]).length : 0;
 
-  const existing=new Set(data.map(t=>`${t.month}|${t.date}|${t.name}|${t.amt}`));
+  const existing=new Set(data.map(t=>`${normalizeMonthLabel(t.month)||t.month}|${t.date}|${t.name}|${t.amt}`));
   const fresh=results.filter(t=>!existing.has(`${t.month}|${t.date}|${t.name}|${t.amt}`));
 
   if(!fresh.length&&results.length){ statusEl.textContent='Transakcje już istnieją w tym miesiącu.'; statusEl.className='fstatus err'; return; }
@@ -3785,7 +3860,7 @@ function monthHasRecurringExpense(sub, monthLabel){
 function recurringEndMonth(){
   const now=new Date();
   let endY=now.getFullYear(), endM=now.getMonth();
-  const mp=String(curMonth||'').split(' ');
+  const mp=String(normalizeMonthLabel(curMonth)||curMonth||'').split(' ');
   const mi=MONTHS_PL.indexOf(mp[0]);
   const y=parseInt(mp[1],10);
   if(mi>=0 && y){
@@ -4218,6 +4293,7 @@ function toggleTheme(){
 (function init(){
   const saved=localStorage.getItem('budzet_theme');
   if(saved==='dark'){ document.documentElement.setAttribute('data-theme','dark'); document.getElementById('theme-lbl').textContent='Ciemny motyw'; }
+  migrateMonthLabels();
   const nowM=MONTHS_PL[new Date().getMonth()]+' '+new Date().getFullYear();
   const months=getMonths();
   if(months.includes(nowM)) curMonth=nowM;
