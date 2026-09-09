@@ -21,7 +21,9 @@ function eq(name, got, want) {
 ok('scan UI', html.includes('id="sched-cal-camera"') && html.includes('id="sched-cal-scan-card"') && html.includes('Zrzut z kalendarza (One Calendar)'));
 ok('paste + apply', html.includes('function pasteSchedCalendar') && html.includes('function applySchedCalImport'));
 ok('drop on scan card', html.includes("getElementById('sched-cal-scan-card')") && html.includes("scanSchedCalendarBlob"));
-ok('allows empty amount on import', html.includes('function insertSchedulePlan') && html.includes("planned: true"));
+ok('presence review no amount', html.includes('id="sched-cal-people"') && html.includes('Dodaj obecność do grafiku') && !html.includes('data-f="amt"'));
+ok('people once', html.includes('function uniqueSchedCalPeople') && html.includes('function fillEmptyPlansForClient') && html.includes('function renameSchedCalPerson'));
+ok('import amt 0', html.includes("amt: 0") && html.includes('function insertSchedulePlan'));
 ok('training includes 0-amt plan', /function isTrainingIncome\(t\)\{\s*return t && t\.cat==='Plan treningowy';\s*\}/.test(html));
 ok('confirm blocks missing amt', html.includes('Najpierw wpisz kwotę'));
 ok('bind paste on schedule', html.includes('bindSchedCalImport'));
@@ -63,6 +65,13 @@ eq('dedupe', ctx.dedupeSchedCalEvents([
   {date:'2026-09-10', time:'18:00', name:'Arek'},
   {date:'2026-09-10', time:'18:00', name:'arek'}
 ]).length, 1);
+eq('unique people', ctx.uniqueSchedCalPeople([
+  {name:'Filip'}, {name:'filip'}, {name:'Adrian'}, {name:'Agata Waniowska'}, {name:'Filip'}
+]), ['Filip','Adrian','Agata Waniowska']);
+eq('person counts', ctx.schedCalPersonCounts([{name:'Filip'},{name:'filip'},{name:'Adrian'}]).filip, 2);
+eq('guest i', ctx.guessSchedGuest('Karolina i Przemek'), true);
+eq('guest slash', ctx.guessSchedGuest('Ola/Agata'), true);
+eq('guest solo', ctx.guessSchedGuest('Filip'), false);
 
 if (failed) { console.error(failed+' failed'); process.exit(1); }
 console.log('\nAll sched calendar-scan tests passed');
