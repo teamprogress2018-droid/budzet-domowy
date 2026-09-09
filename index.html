@@ -137,6 +137,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .rcp-actions label.btn-p,.rcp-actions label.btn-s{display:inline-flex;align-items:center;justify-content:center}
 .rcp-thumb{display:none;margin:10px 0 4px}
 .rcp-thumb img{max-width:100%;max-height:180px;border-radius:var(--rsm);border:1px solid var(--border);object-fit:contain;background:var(--bg2)}
+.sched-cal-list{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.sched-cal-row{display:grid;grid-template-columns:22px 1fr 88px 1fr 92px;gap:8px;align-items:center}
+.sched-cal-row input,.sched-cal-row select{width:100%;padding:7px 8px;border:1px solid var(--border2);border-radius:var(--rsm);background:var(--bg2);color:var(--text);font-size:12px;font-family:inherit}
+#sched-cal-scan-card.over{outline:2px dashed var(--accent);background:var(--green-bg)}
+@media(max-width:700px){
+  .sched-cal-row{grid-template-columns:22px 1fr 1fr;grid-template-rows:auto auto}
+  .sched-cal-row input[type="checkbox"]{grid-row:1;grid-column:1}
+  .sched-cal-row input[type="date"]{grid-row:1;grid-column:2}
+  .sched-cal-row select{grid-row:1;grid-column:3}
+  .sched-cal-row .sc-name{grid-row:2;grid-column:1/-1}
+  .sched-cal-row .sc-amt{grid-row:2;grid-column:3}
+}
 @media(max-width:768px){
   .rcp-actions{flex-direction:column}
   .rcp-actions label.btn-p,.rcp-actions label.btn-s{width:100%;padding:12px 18px;box-sizing:border-box}
@@ -445,7 +457,7 @@ body.sched-dragging{touch-action:none;user-select:none}
 
 <!-- SCHEDULE / GRAFIK ZAROBKÓW -->
 <div class="page" id="page-schedule">
-  <div class="ph"><div class="ph-left"><h2>Grafik pracy</h2><p>To plan — kto ma przyjść. Do zarobków wejdzie dopiero po zatwierdzeniu dnia (gdy wiesz, kto był)</p></div>
+  <div class="ph"><div class="ph-left"><h2>Grafik pracy</h2><p>To plan — kto ma przyjść. Zrzut z One Calendar wrzuca treningi na siatkę; kwotę dopiszesz przy każdym wpisie. Do zarobków wejdzie po zatwierdzeniu dnia.</p></div>
     <button class="btn-s" onclick="goSchedToday()" style="flex-shrink:0">Dzisiaj</button>
   </div>
 
@@ -471,7 +483,30 @@ body.sched-dragging{touch-action:none;user-select:none}
     </div>
   </div>
 
-  <div class="card form-card" style="margin-bottom:14px">
+  <div class="card form-card" id="sched-cal-scan-card" style="margin-bottom:14px">
+    <div class="sec-lbl">📷 Zrzut z kalendarza (One Calendar)</div>
+    <div class="tip">Zrób screen treningów w One Calendar (albo Google / Samsung Kalendarz) i wrzuć tu — zdjęcie, galeria, Ctrl+V albo przeciągnij plik. Odczytam datę, godzinę i imię, wstawię na grafik. Potem kliknij wpis i wpisz kwotę.</div>
+    <div class="rcp-actions">
+      <label class="btn-p" style="margin:0;cursor:pointer">Zrób zdjęcie
+        <input id="sched-cal-camera" type="file" accept="image/*" capture="environment" hidden onchange="scanSchedCalendarFile(this)">
+      </label>
+      <label class="btn-s" style="margin:0;cursor:pointer">Z galerii
+        <input id="sched-cal-gallery" type="file" accept="image/*" hidden onchange="scanSchedCalendarFile(this)">
+      </label>
+      <button type="button" class="btn-s" onclick="pasteSchedCalendar()">Wklej zrzut</button>
+    </div>
+    <div class="rcp-thumb" id="sched-cal-thumb"><img id="sched-cal-thumb-img" alt="Zrzut kalendarza"></div>
+    <span class="fstatus" id="sched-cal-status"></span>
+    <div id="sched-cal-review" style="display:none;margin-top:12px">
+      <div class="sched-cal-list" id="sched-cal-rows"></div>
+      <div class="factions">
+        <button class="btn-p" onclick="applySchedCalImport()">Dodaj zaznaczone do grafiku</button>
+        <button class="btn-s" onclick="clearSchedCalReview()">Anuluj</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card form-card" id="sched-entry-card" style="margin-bottom:14px">
     <div class="sec-lbl">Wpisz trening</div>
     <div class="frow f3">
       <div class="fg"><label>Data</label><input id="sched-date" type="date" onchange="schedDate=this.value;renderSchedule()"></div>
@@ -1417,6 +1452,7 @@ function goPage(p){
   if(idx>=0) nb[idx].classList.add('active');
   curPage=p;
   if(p==='add'){ syncAddMonthField(); bindImportDrop(); }
+  if(p==='schedule') bindSchedCalImport();
   renderPage();
 }
 function renderPage(){
@@ -1682,7 +1718,7 @@ function txToISO(t){
   if(!dd||!mm||mi<0||!year) return '';
   return year+'-'+mm+'-'+dd;
 }
-function isTrainingIncome(t){ return t && t.cat==='Plan treningowy' && (t.amt>0 || t.monthCovered===true); }
+function isTrainingIncome(t){ return t && t.cat==='Plan treningowy'; }
 function isTrainingPlanned(t){ return isTrainingIncome(t) && t.planned===true; }
 function isMonthPay(t){ return t && t.cat==='Plan treningowy' && t.monthPay===true && t.monthCovered!==true && t.weekCovered!==true && t.amt>0; }
 function isWeekPay(t){ return t && t.cat==='Plan treningowy' && t.weekPay===true && t.monthCovered!==true && t.weekCovered!==true && t.amt>0 && !isMonthPay(t); }
@@ -1706,6 +1742,26 @@ function isWeekCovered(t){
 }
 function isPrepaidCovered(t){ return isMonthCovered(t) || isWeekCovered(t); }
 function clientKey(name){ return String(name||'').trim().toLowerCase(); }
+function lastTrainingAmtFor(client){
+  const n=clientKey(client);
+  if(!n) return 0;
+  let best=null;
+  data.forEach(t=>{
+    if(!isTrainingIncome(t) || !(t.amt>0) || clientKey(scheduleClientName(t))!==n) return;
+    const iso=txToISO(t);
+    if(!best || String(iso)>String(best.iso)) best={iso, amt:t.amt};
+  });
+  return best?best.amt:0;
+}
+function knownScheduleClients(){
+  const seen={};
+  data.forEach(t=>{
+    if(!isTrainingIncome(t)) return;
+    const n=scheduleClientName(t).trim();
+    if(n) seen[n]=true;
+  });
+  return Object.keys(seen).sort((a,b)=>a.localeCompare(b,'pl'));
+}
 function monthPrepaidFor(client, month, exceptIdx){
   const n=clientKey(client);
   if(!n||!month) return null;
@@ -1943,7 +1999,7 @@ function openSchedSlot(iso, hour){
   renderSchedule();
   const nameEl=document.getElementById('sched-name');
   if(nameEl) nameEl.focus();
-  const form=document.querySelector('#page-schedule .form-card');
+  const form=document.getElementById('sched-entry-card')||document.querySelector('#page-schedule .form-card');
   if(form) form.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
@@ -2028,7 +2084,8 @@ function cloneScheduleTx(t, iso, time){
   return c;
 }
 function hasTrainingAt(iso, time, client, exceptIdx){
-  return data.some((t,i)=>i!==exceptIdx && isTrainingIncome(t) && txToISO(t)===iso && (t.time||'')===time && scheduleClientName(t)===client);
+  const n=clientKey(client);
+  return data.some((t,i)=>i!==exceptIdx && isTrainingIncome(t) && txToISO(t)===iso && (t.time||'')===time && clientKey(scheduleClientName(t))===n);
 }
 function timedWeekTrainings(){
   if(!schedDate) schedDate=toISODate(new Date());
@@ -2278,7 +2335,7 @@ function updateSchedMonthHint(){
 function updateSchedFormMode(){
   const btn=document.getElementById('sched-save-btn');
   const cancel=document.getElementById('sched-cancel-edit');
-  const lbl=document.querySelector('#page-schedule .form-card .sec-lbl');
+  const lbl=document.querySelector('#sched-entry-card .sec-lbl');
   const editing=schedEditIdx!=null;
   if(btn) btn.textContent=editing?'Zapisz zmiany':'Dodaj trening';
   if(cancel) cancel.style.display=editing?'':'none';
@@ -2321,7 +2378,7 @@ function editScheduleTx(idx){
   }
   updateSchedFormMode();
   updateSchedMonthHint();
-  const form=document.querySelector('#page-schedule .form-card');
+  const form=document.getElementById('sched-entry-card')||document.querySelector('#page-schedule .form-card');
   if(form) form.scrollIntoView({behavior:'smooth', block:'nearest'});
   if(amtEl){ amtEl.focus(); amtEl.select(); }
 }
@@ -2446,6 +2503,12 @@ function confirmSchedDay(){
   if(!iso){ setSchedStatus('Wybierz dzień.', true); return; }
   const pending=trainingsInRange(iso,iso).filter(isTrainingPlanned);
   if(!pending.length){ setSchedStatus('Nie ma zaplanowanych treningów do zatwierdzenia.'); return; }
+  const missingAmt=pending.filter(t=>!(t.amt>0) && !isMonthPay(t) && !isWeekPay(t) && !isPrepaidCovered(t));
+  if(missingAmt.length){
+    setSchedStatus('Najpierw wpisz kwotę przy: '+missingAmt.map(t=>scheduleClientName(t)+' '+ (t.time||'')).join(', ')+'. Kliknij wpis na grafiku.', true);
+    editScheduleTx(data.indexOf(missingAmt[0]));
+    return;
+  }
   const dayAmt=sumTrainingDay(pending);
   const monthAmt=pending.filter(isMonthPay).reduce((s,t)=>s+(t.amt||0),0);
   const weekAmt=pending.filter(isWeekPay).reduce((s,t)=>s+(t.amt||0),0);
@@ -2633,7 +2696,7 @@ function renderSchedule(){
         return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="${isPrepaidCovered(t)?'Opłacone z góry — stawka informacyjna, nie w zarobku dnia':'Kliknij, żeby edytować · przeciągnij, żeby skopiować'}">
           <button class="cs-del" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
           <span class="cs-name">${hourLabel(h)} ${nm}</span>
-          <span class="cs-amt">${isPrepaidCovered(t)?schedAmtLabel(t):(fmt(t.amt)+' · '+schedPayHint(t))}</span>
+          <span class="cs-amt">${isPrepaidCovered(t)?schedAmtLabel(t):(t.amt>0?fmt(t.amt)+' · '+schedPayHint(t):'uzupełnij kwotę')}</span>
         </div>`;
       }).join('');
       const cls='cal-cell'+(iso===schedDate && h===schedHour?' sel':'')+(iso===today && h===nowH?' now':'');
@@ -2644,8 +2707,421 @@ function renderSchedule(){
 }
 
 // ═══════════════════════════════════════════════════
-// EXPENSES PAGE
+// SKAN KALENDARZA → GRAFIK
 // ═══════════════════════════════════════════════════
+let schedCalDraft=[];
+
+function setSchedCalStatus(msg, isErr){
+  const el=document.getElementById('sched-cal-status');
+  if(!el) return;
+  el.textContent=msg||'';
+  el.className=isErr?'fstatus err':'fstatus';
+}
+function showSchedCalThumb(fileOrBlob){
+  const wrap=document.getElementById('sched-cal-thumb');
+  const img=document.getElementById('sched-cal-thumb-img');
+  if(!wrap||!img||!fileOrBlob) return;
+  if(img._url) URL.revokeObjectURL(img._url);
+  img._url=URL.createObjectURL(fileOrBlob);
+  img.src=img._url;
+  wrap.style.display='block';
+}
+function schedCalEsc(s){
+  return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function snapSchedHour(raw){
+  const s=String(raw||'').trim();
+  if(!s) return '';
+  let m=s.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  if(!m) m=s.match(/\b([01]?\d|2[0-3])\s*[hH]\s*([0-5]\d)\b/);
+  if(!m){
+    m=s.match(/\b([01]?\d|2[0-3])[.]([0-5]\d)\b/);
+    if(m){
+      const min=parseInt(m[2],10);
+      // 10.09 / 11.09 to data, nie godzina; 18.00 i 8.30 to czas
+      if(min>0 && min<=12) m=null;
+    }
+  }
+  if(!m){
+    if(/[./-]/.test(s)) return '';
+    m=s.match(/^(\d{1,2})$/);
+    if(m) m=[m[0], m[1], '00'];
+  }
+  if(!m) return '';
+  let h=parseInt(m[1],10);
+  const min=parseInt(m[2]||'0',10);
+  if(!Number.isFinite(h) || h>23) return '';
+  if(min>=45) h+=1;
+  if(h>23) h=23;
+  if(h<6) h=6;
+  if(!SCHED_HOURS.includes(h)) return '';
+  return hourLabel(h);
+}
+function cleanSchedClientName(name){
+  let n=String(name||'').replace(/\s+/g,' ').trim();
+  n=n.replace(/^\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\s*/,'');
+  n=n.replace(/^\.?\d{2,4}\b\s*/,'');
+  n=n.replace(/^(trening|treningi|tp|sesja|pt|personal(?:ny)?|one calendar|kalendarz)\s*[:\-–—]?\s*/i,'');
+  n=n.replace(/\s*(trening|sesja|tp)$/i,'');
+  n=n.replace(/^[\-–—•·]+/,'').trim();
+  n=n.replace(/\s+\d{1,2}:\d{2}(?:\s*[-–—]\s*\d{1,2}:\d{2})?$/,'');
+  return n;
+}
+function normalizeSchedCalEvent(ev, todayIso){
+  const today=todayIso||toISODate(new Date());
+  const name=cleanSchedClientName(ev&&(ev.name||ev.title||ev.client));
+  if(!name || name.length<2) return null;
+  let iso=String((ev&&(ev.date||ev.iso))||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(iso)){
+    const raw=String((ev&&ev.date)||'');
+    const dm=raw.match(/(\d{1,2})[.\-/](\d{1,2})(?:[.\-/](\d{2,4}))?/);
+    const monthRe=/(\d{1,2})\s+(stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|wrzesnia|października|pazdziernika|listopada|grudnia)/i;
+    const mn=raw.match(monthRe);
+    if(dm){
+      const year=dm[3]?(String(dm[3]).length===2?'20'+dm[3]:dm[3]):today.slice(0,4);
+      iso=year+'-'+String(dm[2]).padStart(2,'0')+'-'+String(dm[1]).padStart(2,'0');
+    }else if(mn){
+      let mi=MONTHS_PL_GEN.findIndex(x=>x.toLowerCase()===mn[2].toLowerCase());
+      if(mi<0 && /wrzes/i.test(mn[2])) mi=8;
+      if(mi<0 && /pazdzier|paździer/i.test(mn[2])) mi=9;
+      if(mi<0) return null;
+      iso=today.slice(0,4)+'-'+String(mi+1).padStart(2,'0')+'-'+String(mn[1]).padStart(2,'0');
+    }else return null;
+  }
+  const dt=parseISODate(iso);
+  if(isNaN(dt.getTime())) return null;
+  const time=snapSchedHour(ev&&(ev.time||ev.hour));
+  if(!time) return null;
+  return {iso, time, name};
+}
+function dedupeSchedCalEvents(list){
+  const seen={};
+  const out=[];
+  (list||[]).forEach(ev=>{
+    const n=normalizeSchedCalEvent(ev);
+    if(!n) return;
+    const key=n.iso+'|'+n.time+'|'+clientKey(n.name);
+    if(seen[key]) return;
+    seen[key]=true;
+    out.push(n);
+  });
+  out.sort((a,b)=>a.iso.localeCompare(b.iso)||a.time.localeCompare(b.time)||a.name.localeCompare(b.name,'pl'));
+  return out;
+}
+function parseCalendarOcrText(text, todayIso){
+  const today=todayIso||toISODate(new Date());
+  const events=[];
+  let currentDate=today;
+  let pendingTime='';
+  const monthRe=/(\d{1,2})\s+(stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|wrzesnia|października|pazdziernika|listopada|grudnia)/i;
+  const dateRe=/(\d{1,2})[.\-/](\d{1,2})(?:[.\-/](\d{2,4}))?/;
+  const timeRe=/\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
+  const wdRe=/\b(?:poniedziałek|wtorek|środa|czwartek|piątek|piatek|sobota|niedziela)\s+(\d{1,2})\b/i;
+  function takeDate(ln){
+    const mn=ln.match(monthRe);
+    if(mn){
+      let mi=MONTHS_PL_GEN.findIndex(x=>x.toLowerCase()===mn[2].toLowerCase());
+      if(mi<0 && /wrzes/i.test(mn[2])) mi=8;
+      if(mi<0 && /pazdzier|paździer/i.test(mn[2])) mi=9;
+      if(mi>=0){
+        currentDate=today.slice(0,4)+'-'+String(mi+1).padStart(2,'0')+'-'+String(mn[1]).padStart(2,'0');
+        return;
+      }
+    }
+    const dd=ln.match(dateRe);
+    if(dd && parseInt(dd[1],10)<=31 && parseInt(dd[2],10)<=12){
+      const year=dd[3]?(String(dd[3]).length===2?'20'+dd[3]:dd[3]):today.slice(0,4);
+      currentDate=year+'-'+String(dd[2]).padStart(2,'0')+'-'+String(dd[1]).padStart(2,'0');
+      return;
+    }
+    const wd=ln.match(wdRe);
+    if(wd && parseInt(wd[1],10)>=1 && parseInt(wd[1],10)<=31){
+      currentDate=today.slice(0,8)+String(wd[1]).padStart(2,'0');
+    }
+  }
+  function leftoverName(ln){
+    return cleanSchedClientName(
+      ln.replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g,' ')
+        .replace(dateRe,' ')
+        .replace(monthRe,' ')
+        .replace(wdRe,' ')
+        .replace(/[-–—]/g,' ')
+    );
+  }
+  function pushEv(time, name){
+    const ev=normalizeSchedCalEvent({date:currentDate, time, name}, today);
+    if(ev) events.push(ev);
+  }
+  String(text||'').split(/\n+/).forEach(line=>{
+    const ln=line.trim();
+    if(!ln) return;
+    takeDate(ln);
+    const times=[...ln.matchAll(timeRe)].map(tm=>tm[1]+':'+tm[2]);
+    const name=leftoverName(ln);
+    if(times.length){
+      const time=times[0];
+      if(name && name.length>=2){ pushEv(time, name); pendingTime=''; }
+      else pendingTime=time;
+      return;
+    }
+    if(pendingTime && name && name.length>=2){
+      pushEv(pendingTime, name);
+      pendingTime='';
+    }
+  });
+  return dedupeSchedCalEvents(events);
+}
+function fileToJpegDataUrl(fileOrBlob, max, quality){
+  max=max||1280; quality=quality==null?0.82:quality;
+  return new Promise(resolve=>{
+    const url=URL.createObjectURL(fileOrBlob);
+    const img=new Image();
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      let w=img.width, h=img.height;
+      const scale=Math.min(1, max/Math.max(w,h,1));
+      w=Math.max(1,Math.round(w*scale));
+      h=Math.max(1,Math.round(h*scale));
+      const c=document.createElement('canvas');
+      c.width=w; c.height=h;
+      const ctx=c.getContext('2d');
+      ctx.fillStyle='#111';
+      ctx.fillRect(0,0,w,h);
+      ctx.drawImage(img,0,0,w,h);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); resolve(''); };
+    img.src=url;
+  });
+}
+async function parseCalendarWithAI(dataUrl){
+  const mediaType=(String(dataUrl).split(';')[0].split(':')[1]||'image/jpeg').split('+')[0];
+  const base64=String(dataUrl).split(',')[1]||'';
+  if(!base64) throw new Error('Brak obrazu');
+  const today=toISODate(new Date());
+  const known=knownScheduleClients();
+  const system='Jesteś asystentem trenera personalnego. Zrzut to kalendarz treningów (One Calendar, Samsung, Google). Wyciągnij wpisy spotkań / treningów z klientami. Zwróć WYŁĄCZNIE JSON bez markdown: {"events":[{"date":"YYYY-MM-DD","time":"HH:MM","name":"Imię"}]} . Nie zmyślaj. Godzinę podaj startu (zaokrąglij w dół do pełnej godziny, 8:30 → 08:00). Gdy brak roku, użyj roku z daty odniesienia '+today+'. Pomiń urodziny, przypomnienia i całodniowe. Nazwa = imię klienta bez słowa trening. Znani klienci: '+(known.join(', ')||'brak')+'.';
+  const resp=await fetch(ADVISOR_PROXY, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:2500,
+      system,
+      messages:[{role:'user', content:[
+        {type:'image', source:{type:'base64', media_type: mediaType.indexOf('image/')===0?mediaType:'image/jpeg', data:base64}},
+        {type:'text', text:'Odczytaj treningi z tego zrzutu kalendarza. Data odniesienia: '+today+'.'}
+      ]}]
+    })
+  });
+  const payload=await resp.json();
+  if(payload.error) throw new Error(payload.error.message||'Błąd AI');
+  const rawText=(payload.content||[]).map(b=>b.text||'').join('');
+  let parsed=null;
+  try{ parsed=JSON.parse(rawText.replace(/```json|```/g,'').trim()); }
+  catch(e){ const m=rawText.match(/\{[\s\S]+\}/); if(m) parsed=JSON.parse(m[0]); }
+  const list=(parsed&&parsed.events)||parsed||[];
+  if(!Array.isArray(list)) throw new Error('AI nie zwróciło listy treningów');
+  return dedupeSchedCalEvents(list);
+}
+async function parseCalendarWithOcr(blob){
+  const prepared=await prepImageForOcr(blob);
+  const T=await loadTesseract();
+  const result=await T.recognize(prepared, 'pol+eng');
+  const text=String(result&&result.data&&result.data.text||'').trim();
+  return parseCalendarOcrText(text);
+}
+function presentSchedCalReview(events){
+  const wrap=document.getElementById('sched-cal-review');
+  const rows=document.getElementById('sched-cal-rows');
+  if(!wrap||!rows) return;
+  schedCalDraft=events||[];
+  if(!schedCalDraft.length){
+    wrap.style.display='none';
+    setSchedCalStatus('Nie znalazłem treningów na zrzucie. Zrób ostrzejszy screen tygodnia (widać godziny i imiona).', true);
+    return;
+  }
+  rows.innerHTML=schedCalDraft.map((ev,i)=>{
+    const amt=lastTrainingAmtFor(ev.name);
+    const exists=hasTrainingAt(ev.iso, ev.time, ev.name);
+    return `<label class="sched-cal-row">
+      <input type="checkbox" ${exists?'':'checked'} data-i="${i}" title="${exists?'Ten slot już jest w grafiku':''}">
+      <input type="date" value="${schedCalEsc(ev.iso)}" data-f="iso" data-i="${i}">
+      <select data-f="time" data-i="${i}">${SCHED_HOURS.map(h=>`<option value="${hourLabel(h)}" ${hourLabel(h)===ev.time?'selected':''}>${hourLabel(h)}</option>`).join('')}</select>
+      <input class="sc-name" type="text" value="${schedCalEsc(ev.name)}" data-f="name" data-i="${i}" placeholder="Imię">
+      <input class="sc-amt" type="number" min="0" step="0.01" value="${amt||''}" data-f="amt" data-i="${i}" placeholder="zł">
+    </label>`;
+  }).join('');
+  wrap.style.display='block';
+  const withAmt=schedCalDraft.filter(ev=>lastTrainingAmtFor(ev.name)>0).length;
+  setSchedCalStatus('✓ '+schedCalDraft.length+' trening(ów) z kalendarza'+(withAmt?' · '+withAmt+' ze stawką z poprzednich wpisów':'')+'. Sprawdź i dopisz kwoty, potem dodaj do grafiku.');
+}
+function readSchedCalDraftFromForm(){
+  const rows=[...document.querySelectorAll('#sched-cal-rows .sched-cal-row')];
+  const out=[];
+  rows.forEach(row=>{
+    const chk=row.querySelector('input[type="checkbox"]');
+    if(chk && !chk.checked) return;
+    const iso=(row.querySelector('[data-f="iso"]')||{}).value;
+    const time=(row.querySelector('[data-f="time"]')||{}).value;
+    const name=((row.querySelector('[data-f="name"]')||{}).value||'').trim();
+    const amt=parseFloat(String((row.querySelector('[data-f="amt"]')||{}).value||'').replace(',','.'))||0;
+    const n=normalizeSchedCalEvent({date:iso, time, name});
+    if(!n) return;
+    n.amt=amt;
+    out.push(n);
+  });
+  return out;
+}
+function insertSchedulePlan(ev){
+  const client=cleanSchedClientName(ev.name);
+  const iso=ev.iso;
+  const time=ev.time;
+  const amt=Number(ev.amt)||0;
+  const month=isoToMonthLabel(iso);
+  const week=isoWeekKey(iso);
+  const existingPay=monthPrepaidFor(client, month);
+  const existingWeek=weekPrepaidFor(client, week);
+  const rec={
+    id: newSchedTxId(),
+    date: isoToTxDate(iso),
+    iso,
+    time,
+    name: 'Plan treningowy — '+client,
+    cat: 'Plan treningowy',
+    amt,
+    month,
+    src: 'cash',
+    withGuest: false,
+    planned: true,
+    monthPay: false,
+    weekPay: false,
+    monthCovered: !!existingPay,
+    weekCovered: !existingPay && !!existingWeek
+  };
+  data.push(rec);
+  return rec;
+}
+function applySchedCalImport(){
+  const picks=readSchedCalDraftFromForm();
+  if(!picks.length){ setSchedCalStatus('Zaznacz przynajmniej jeden trening.', true); return; }
+  let added=0, skipped=0;
+  picks.forEach(ev=>{
+    if(hasTrainingAt(ev.iso, ev.time, ev.name)){ skipped++; return; }
+    insertSchedulePlan(ev);
+    added++;
+  });
+  if(added) save();
+  const first=picks[0];
+  if(first){ schedDate=first.iso; const h=txHour({time:first.time}); if(h!=null) schedHour=h; }
+  curMonth=isoToMonthLabel(schedDate);
+  setSchedCalStatus(added
+    ? '✓ Dodano '+treningLabel(added)+' do grafiku'+(skipped?' · pominięto '+skipped+' (już były)':'')+'. Kliknij wpis i wpisz kwotę, jeśli pusta.'
+    : (skipped?'Te treningi już są w grafiku.':'Nic nie dodano.'));
+  if(added){
+    document.getElementById('sched-cal-review').style.display='none';
+    schedCalDraft=[];
+  }
+  renderSidebar();
+  renderSchedule();
+}
+function clearSchedCalReview(){
+  schedCalDraft=[];
+  const wrap=document.getElementById('sched-cal-review');
+  if(wrap) wrap.style.display='none';
+  setSchedCalStatus('');
+}
+function scanSchedCalendarFile(input){
+  const f=input&&input.files&&input.files[0];
+  if(!f) return;
+  showSchedCalThumb(f);
+  scanSchedCalendarBlob(f, f.name||'zrzut');
+  input.value='';
+}
+async function scanSchedCalendarBlob(blob, label){
+  setSchedCalStatus('⏳ Odczytuję kalendarz'+(label?': '+label:'')+'…');
+  const review=document.getElementById('sched-cal-review');
+  if(review) review.style.display='none';
+  try{
+    const dataUrl=await fileToJpegDataUrl(blob);
+    let events=[];
+    let used='ai';
+    try{
+      events=await parseCalendarWithAI(dataUrl);
+    }catch(e){
+      used='ocr';
+      setSchedCalStatus('AI niedostępne — czytam zrzut lokalnie…');
+      events=await parseCalendarWithOcr(blob);
+    }
+    if(!events.length && used==='ai'){
+      setSchedCalStatus('AI nic nie znalazło — próbuję odczyt tekstu ze screena…');
+      events=await parseCalendarWithOcr(blob);
+    }
+    presentSchedCalReview(events);
+  }catch(err){
+    setSchedCalStatus('Nie udało się odczytać zrzutu. Wgraj ostrzejszy screen tygodnia z One Calendar.', true);
+  }
+}
+async function pasteSchedCalendar(){
+  try{
+    if(navigator.clipboard && navigator.clipboard.read){
+      const items=await navigator.clipboard.read();
+      for(const item of items){
+        const imgType=(item.types||[]).find(t=>String(t).startsWith('image/'));
+        if(imgType){
+          const blob=await item.getType(imgType);
+          showSchedCalThumb(blob);
+          await scanSchedCalendarBlob(blob, 'schowek');
+          return;
+        }
+      }
+    }
+    setSchedCalStatus('Brak obrazu w schowku. Zrób screen (np. w One Calendar) i wklej tutaj (Ctrl+V).', true);
+  }catch(e){
+    setSchedCalStatus('Nie mogę czytać schowka — użyj „Z galerii” albo wklej zrzut (Ctrl+V) na tej stronie.', true);
+  }
+}
+function bindSchedCalImport(){
+  if(bindSchedCalImport.ok) return;
+  bindSchedCalImport.ok=true;
+  document.addEventListener('paste', e=>{
+    if(curPage!=='schedule') return;
+    const t=e.target;
+    if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT')) return;
+    const cd=e.clipboardData;
+    const img=firstImageFromTransfer(cd);
+    if(!img) return;
+    e.preventDefault();
+    showSchedCalThumb(img);
+    scanSchedCalendarBlob(img, img.name||'zrzut ekranu');
+  });
+  const card=document.getElementById('sched-cal-scan-card');
+  if(!card) return;
+  const onOver=e=>{
+    if(curPage!=='schedule' || !e.dataTransfer) return;
+    const types=[...e.dataTransfer.types||[]];
+    if(!types.includes('Files') && !types.includes('text/uri-list')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    card.classList.add('over');
+  };
+  card.addEventListener('dragenter', onOver);
+  card.addEventListener('dragover', onOver);
+  card.addEventListener('dragleave', e=>{
+    if(!card.contains(e.relatedTarget)) card.classList.remove('over');
+  });
+  card.addEventListener('drop', e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    card.classList.remove('over');
+    if(curPage!=='schedule') return;
+    const img=firstImageFromTransfer(e.dataTransfer);
+    if(!img){ setSchedCalStatus('Upuść zrzut kalendarza (obraz).', true); return; }
+    showSchedCalThumb(img);
+    scanSchedCalendarBlob(img, img.name||'zrzut');
+  });
+}
+
 function renderExpenses(){
   const {tx,exp,cashExp,sorted} = mdata(curMonth);
   const bankExp = exp - cashExp;
@@ -4836,6 +5312,7 @@ function toggleTheme(){
   document.getElementById('imp-month').value='';
   quickTypeChange();
   bindImportDrop();
+  bindSchedCalImport();
   migrateSchedulePlanned();
   markMonthCoveredSiblings();
   markWeekCoveredSiblings();
