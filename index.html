@@ -3184,8 +3184,10 @@ function applySchedCalImport(){
   }
   renderSidebar();
   renderSchedule();
-}
-function clearSchedCalReview(){
+  if(added){
+    const cal=document.getElementById('sched-cal');
+    if(cal) cal.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
   schedCalDraft=[];
   const wrap=document.getElementById('sched-cal-review');
   if(wrap) wrap.style.display='none';
