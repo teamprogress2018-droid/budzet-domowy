@@ -101,12 +101,13 @@ async function fbSyncFromCloud(){
       });
       saveImpulseData(impulses);
     }
+    let holdingsData = {};
     if(holdingsSnap.exists){
-      const hd = holdingsSnap.data()||{};
-      saveHoldingsData({ stocks: Number(hd.stocks)||0, bitcoin: Number(hd.bitcoin)||0 });
+      holdingsData = holdingsSnap.data()||{};
+      saveHoldingsData({ stocks: Number(holdingsData.stocks)||0, bitcoin: Number(holdingsData.bitcoin)||0 });
     }
 
-    const restored = await fbRestoreBudgetIfNeeded();
+    const restored = fbApplyCloudBudget(holdingsData);
     if(restored) return;
 
     // Odśwież widok, jeśli akurat na jednej z tych stron
@@ -117,12 +118,13 @@ async function fbSyncFromCloud(){
       if(curPage==='expenses' && typeof renderExpenses==='function') renderExpenses();
       if(curPage==='subs' && typeof renderSubs==='function') renderSubs();
       if(curPage==='schedule' && typeof renderSchedule==='function') renderSchedule();
+      if(curPage==='income' && typeof renderIncome==='function') renderIncome();
     }
     fbSetStatus('✓ Zsynchronizowano · ' + fbCurrentUser.email);
     fbPushBudget();
   } catch(e) {
     console.warn('Synchronizacja z chmury nieudana:', e.message);
-    fbSetStatus('⚠️ Brak synchronizacji (offline?)', true);
+    fbSetStatus('⚠️ Synchronizacja: ' + fbBudgetErr(e), true);
   }
 }
 
@@ -166,33 +168,47 @@ function fbPushBudget(){
   fbBudgetTimer = setTimeout(fbPushBudgetNow, 600);
 }
 
+function fbBudgetErr(e){
+  const msg = String((e && (e.message || e.code)) || e || '');
+  if(/permission-denied|missing or insufficient permissions/i.test(msg)) return 'brak uprawnień do chmury';
+  if(/unavailable|offline|Failed to get document because the client is offline/i.test(msg)) return 'offline';
+  if(/too (large|big)|exceed|longer than/i.test(msg)) return 'kopia za duża';
+  return msg.slice(0, 80) || 'błąd chmury';
+}
+
 async function fbPushBudgetNow(){
   if(!fbCurrentUser) return;
   let list = null;
   try { list = JSON.parse(localStorage.getItem('budzet_v3')||'null'); } catch(e){ return; }
   if(fbIsDemoBudget(list)) return;
+  const payload = {
+    ownerUid: fbCurrentUser.uid,
+    budgetJson: JSON.stringify(list),
+    budgetTxCount: Array.isArray(list) ? list.length : 0,
+    budgetUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
   try {
-    await fbDb.collection('budgetBackups').doc(fbCurrentUser.uid).set({
-      ownerUid: fbCurrentUser.uid,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      txCount: Array.isArray(list) ? list.length : 0,
-      json: JSON.stringify(list),
-      extras: fbReadBudgetExtras()
-    });
-    fbSetStatus('✓ Kopia budżetu w chmurze · ' + fbCurrentUser.email);
+    await fbDb.collection('holdings').doc(fbCurrentUser.uid).set(
+      { ...payload, budgetExtras: fbReadBudgetExtras() },
+      { merge: true }
+    );
+    fbSetStatus('✓ Zapisano · kopia w chmurze');
   } catch(e){
-    console.warn('Firestore (budgetBackups) błąd zapisu:', e.message);
-    fbSetStatus('⚠️ Nie zapisano kopii budżetu (offline?)', true);
+    console.warn('Firestore (holdings/budget) błąd zapisu:', e.message);
+    try {
+      await fbDb.collection('holdings').doc(fbCurrentUser.uid).set(payload, { merge: true });
+      fbSetStatus('✓ Zapisano · kopia budżetu w chmurze');
+    } catch(e2){
+      console.warn('Firestore (holdings/budget) drugi błąd:', e2.message);
+      fbSetStatus('✓ Zapisano w przeglądarce · chmura: ' + fbBudgetErr(e2), true);
+    }
   }
 }
 
-async function fbRestoreBudgetIfNeeded(){
-  if(!fbCurrentUser) return false;
-  const snap = await fbDb.collection('budgetBackups').doc(fbCurrentUser.uid).get();
-  if(!snap.exists) return false;
-  const cloud = snap.data()||{};
+function fbApplyCloudBudget(hd){
+  if(!hd || typeof hd.budgetJson!=='string' || !hd.budgetJson) return false;
   let cloudList = null;
-  try { cloudList = JSON.parse(cloud.json||'null'); } catch(e){ return false; }
+  try { cloudList = JSON.parse(hd.budgetJson); } catch(e){ return false; }
   if(fbIsDemoBudget(cloudList)) return false;
   let local = null;
   try { local = JSON.parse(localStorage.getItem('budzet_v3')||'null'); } catch(e){}
@@ -200,8 +216,8 @@ async function fbRestoreBudgetIfNeeded(){
   const cloudN = Array.isArray(cloudList) ? cloudList.length : 0;
   const localN = Array.isArray(local) ? local.length : 0;
   if(!localDemo && localN >= cloudN) return false;
-  localStorage.setItem('budzet_v3', cloud.json);
-  fbWriteBudgetExtras(cloud.extras);
+  localStorage.setItem('budzet_v3', hd.budgetJson);
+  fbWriteBudgetExtras(hd.budgetExtras);
   fbSetStatus('✓ Przywrócono budżet z chmury');
   location.reload();
   return true;
@@ -238,7 +254,7 @@ async function fbPushHoldings(h){
       bitcoin: Number(h.bitcoin)||0,
       ownerUid: fbCurrentUser.uid,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true });
     fbSetStatus('✓ Zapisano w chmurze');
   } catch(e){ console.warn('Firestore (holdings) błąd zapisu:', e.message); fbSetStatus('⚠️ Nie zapisano w chmurze (offline?)', true); }
 }

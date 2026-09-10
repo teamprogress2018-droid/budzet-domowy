@@ -499,6 +499,7 @@ body.sched-dragging{touch-action:none;user-select:none}
       <button class="btn-s" onclick="copySchedNextWeek()">Kopiuj na następny tydzień</button>
       <button class="btn-s" onclick="copySchedToMonthEnd()">Kopiuj do końca miesiąca</button>
       <button class="btn-p" id="sched-confirm-day-btn" onclick="confirmSchedDay()">Zatwierdź dzień → zarobki</button>
+      <button class="btn-p" id="sched-confirm-week-btn" onclick="confirmSchedWeek()">Zatwierdź tydzień → zarobki</button>
     </div>
   </div>
 
@@ -1317,8 +1318,17 @@ let curMonth = 'Maj 2026';
 let charts = {};
 
 function save(){
-  try{ localStorage.setItem('budzet_v3', JSON.stringify(data)); }catch(e){}
+  try{
+    localStorage.setItem('budzet_v3', JSON.stringify(data));
+  }catch(e){
+    const quota=e && (e.name==='QuotaExceededError' || e.code===22);
+    const msg=quota?'Brak miejsca w przeglądarce — nie zapisano grafiku.':'Nie zapisano lokalnie: '+(e.message||e);
+    if(typeof setSchedStatus==='function') setSchedStatus(msg, true);
+    if(typeof fbSetStatus==='function') fbSetStatus('⚠️ '+msg, true);
+    return false;
+  }
   if(typeof fbPushBudget==='function') fbPushBudget();
+  return true;
 }
 
 const MONTHS_PL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
@@ -2022,6 +2032,26 @@ function migrateSchedulePlanned(){
   });
   if(n) save();
   return n;
+}
+function trainingReadyToEarn(t){
+  if(!isTrainingPlanned(t)) return false;
+  if(t.amt>0 || isMonthPay(t) || isWeekPay(t)) return true;
+  if(t.monthCovered===true || t.weekCovered===true) return true;
+  return false;
+}
+function confirmElapsedScheduleTrainings(){
+  const today=toISODate(new Date());
+  let n=0, amt=0;
+  data.forEach(t=>{
+    if(!trainingReadyToEarn(t)) return;
+    const iso=txToISO(t);
+    if(!iso || iso>=today) return;
+    t.planned=false;
+    n++;
+    amt+=trainingMonthAmt(t);
+  });
+  if(n) save();
+  return {n, amt};
 }
 function scheduleClientName(t){
   return String(t.name||'').replace(/^Plan treningowy\s*[—–-]\s*/,'');
@@ -2980,6 +3010,39 @@ function confirmSchedDay(){
   renderSchedule();
 }
 
+function confirmSchedWeek(){
+  const iso=(document.getElementById('sched-date')||{}).value || schedDate || toISODate(new Date());
+  const weekR=schedRange(iso,'week');
+  const pending=trainingsInRange(weekR.from, weekR.to).filter(isTrainingPlanned);
+  if(!pending.length){ setSchedStatus('W tym tygodniu nie ma zaplanowanych treningów do zatwierdzenia.'); return; }
+  const missingAmt=pending.filter(t=>!trainingReadyToEarn(t));
+  if(missingAmt.length){
+    setSchedStatus('Najpierw wpisz kwotę przy: '+missingAmt.map(t=>scheduleClientName(t)+' '+ (t.time||'')).join(', ')+'.', true);
+    editScheduleTx(data.indexOf(missingAmt[0]));
+    return;
+  }
+  const ready=pending.filter(trainingReadyToEarn);
+  const dayAmt=sumTrainingDay(ready);
+  const monthAmt=ready.filter(isMonthPay).reduce((s,t)=>s+(t.amt||0),0);
+  const weekAmt=ready.filter(isWeekPay).reduce((s,t)=>s+(t.amt||0),0);
+  let ask='Zatwierdzić '+treningLabel(ready.length)+' z tygodnia '+weekR.label+'?';
+  if(dayAmt) ask+='\n\nZa treningi: '+fmt(dayAmt)+' → przychody.';
+  if(weekAmt) ask+='\nAbonament za tydzień: '+fmt(weekAmt)+' → przychody.';
+  if(monthAmt) ask+='\nAbonament za miesiąc: '+fmt(monthAmt)+' → przychody miesiąca.';
+  ask+='\n\nUsuń wcześniej osoby, które nie przyszły.';
+  if(!confirm(ask)) return;
+  ready.forEach(t=>{ t.planned=false; });
+  save();
+  curMonth=isoToMonthLabel(iso);
+  schedDate=iso;
+  const toInc=dayAmt+monthAmt+weekAmt;
+  setSchedStatus(toInc
+    ? '✓ Tydzień w przychodach — '+treningLabel(ready.length)+' · '+fmt(toInc)+'.'
+    : '✓ Zatwierdzono obecność tygodnia — '+treningLabel(ready.length)+'.');
+  renderSidebar();
+  renderSchedule();
+}
+
 function deleteEditedSchedule(){
   if(schedEditIdx==null) return;
   deleteScheduleTx(schedEditIdx);
@@ -3061,14 +3124,22 @@ function renderSchedule(){
   const monthPaySplit=sumTrainingCashBank(monthList, false);
   const dayMonthPay=dayList.filter(isMonthPay).reduce((s,t)=>s+(t.amt||0),0);
   const dayWeekPay=dayList.filter(isWeekPay).reduce((s,t)=>s+(t.amt||0),0);
-  document.getElementById('sched-sum-day').textContent=fmt(dayEarned);
-  document.getElementById('sched-sum-day-n').textContent='💵 '+fmt(dayPay.cash)+' · 🏦 '+fmt(dayPay.bank)+(dayPlanLeft?' · plan '+fmt(dayPlanLeft):'')+(dayWeekPay?' · wpłata tyg. '+fmt(dayWeekPay):'')+(dayMonthPay?' · wpłata mies. '+fmt(dayMonthPay):'')+' · '+treningLabel(dayList.length);
-  document.getElementById('sched-sum-week').textContent=fmt(weekEarned);
-  document.getElementById('sched-sum-week-n').textContent='💵 '+fmt(weekPay.cash)+' · 🏦 '+fmt(weekPay.bank)+(weekPlanLeft?' · plan '+fmt(weekPlanLeft):'')+' · '+treningLabel(weekList.length);
-  document.getElementById('sched-sum-month').textContent=fmt(monthEarned);
-  document.getElementById('sched-sum-month-n').textContent='💵 '+fmt(monthPaySplit.cash)+' · 🏦 '+fmt(monthPaySplit.bank)+(monthPlanLeft?' · plan '+fmt(monthPlanLeft):'')+' · '+treningLabel(monthList.length);
+  const dayShow=dayEarned>0?dayEarned:dayPlanLeft;
+  const weekShow=weekEarned>0?weekEarned:weekPlanLeft;
+  const monthShow=monthEarned>0?monthEarned:monthPlanLeft;
+  document.getElementById('sched-sum-day').textContent=fmt(dayShow);
+  document.getElementById('sched-sum-day').className='mv '+(dayEarned>0?'g':'n');
+  document.getElementById('sched-sum-day-n').textContent=(dayEarned?'💵 '+fmt(dayPay.cash)+' · 🏦 '+fmt(dayPay.bank):(dayPlanLeft?'plan — zatwierdź dzień, żeby weszło do przychodów':'💵 '+fmt(dayPay.cash)+' · 🏦 '+fmt(dayPay.bank)))+(dayPlanLeft && dayEarned?' · plan '+fmt(dayPlanLeft):'')+(dayWeekPay?' · wpłata tyg. '+fmt(dayWeekPay):'')+(dayMonthPay?' · wpłata mies. '+fmt(dayMonthPay):'')+' · '+treningLabel(dayList.length);
+  document.getElementById('sched-sum-week').textContent=fmt(weekShow);
+  document.getElementById('sched-sum-week').className='mv '+(weekEarned>0?'g':'n');
+  document.getElementById('sched-sum-week-n').textContent=(weekEarned?'💵 '+fmt(weekPay.cash)+' · 🏦 '+fmt(weekPay.bank):(weekPlanLeft?'plan — zatwierdź, żeby weszło do przychodów':'💵 '+fmt(weekPay.cash)+' · 🏦 '+fmt(weekPay.bank)))+(weekPlanLeft && weekEarned?' · plan '+fmt(weekPlanLeft):'')+' · '+treningLabel(weekList.length);
+  document.getElementById('sched-sum-month').textContent=fmt(monthShow);
+  document.getElementById('sched-sum-month').className='mv '+(monthEarned>0?'g':'n');
+  document.getElementById('sched-sum-month-n').textContent=(monthEarned?'💵 '+fmt(monthPaySplit.cash)+' · 🏦 '+fmt(monthPaySplit.bank):(monthPlanLeft?'plan — zatwierdź, żeby weszło do przychodów':'💵 '+fmt(monthPaySplit.cash)+' · 🏦 '+fmt(monthPaySplit.bank)))+(monthPlanLeft && monthEarned?' · plan '+fmt(monthPlanLeft):'')+' · '+treningLabel(monthList.length);
   const confirmBtn=document.getElementById('sched-confirm-day-btn');
+  const confirmWeekBtn=document.getElementById('sched-confirm-week-btn');
   const pendingDay=dayList.filter(isTrainingPlanned);
+  const pendingWeek=weekList.filter(isTrainingPlanned);
   if(confirmBtn){
     if(pendingDay.length){
       confirmBtn.hidden=false;
@@ -3081,6 +3152,15 @@ function renderSchedule(){
     }else{
       confirmBtn.hidden=true;
       confirmBtn.disabled=true;
+    }
+  }
+  if(confirmWeekBtn){
+    if(pendingWeek.length){
+      confirmWeekBtn.hidden=false;
+      confirmWeekBtn.disabled=false;
+    }else{
+      confirmWeekBtn.hidden=true;
+      confirmWeekBtn.disabled=true;
     }
   }
 
@@ -5903,15 +5983,19 @@ function toggleTheme(){
   markWeekCoveredSiblings();
   applyRecurringExpenses();
   const recoveredGrafik=applySeptemberGrafikRecovery();
+  const elapsed=confirmElapsedScheduleTrainings();
   const monthsAfter=getMonths();
   if(monthsAfter.includes(nowM)) curMonth=nowM;
   else if(monthsAfter.length) curMonth=monthsAfter[monthsAfter.length-1];
   renderSidebar();
   renderDash();
-  if(recoveredGrafik && typeof goPage==='function'){
+  if((recoveredGrafik || (elapsed && elapsed.n)) && typeof goPage==='function'){
     try{
       goPage('schedule');
-      if(typeof setSchedStatus==='function') setSchedStatus('✓ Przywrócono '+recoveredGrafik+' treningów z tygodnia 1–4 września 2026 (z zapisanego grafiku).');
+      const bits=[];
+      if(recoveredGrafik) bits.push('Przywrócono '+recoveredGrafik+' treningów z tygodnia 1–4 września');
+      if(elapsed && elapsed.n) bits.push('minione '+treningLabel(elapsed.n)+' w przychodach'+(elapsed.amt?' · '+fmt(elapsed.amt):''));
+      if(typeof setSchedStatus==='function' && bits.length) setSchedStatus('✓ '+bits.join(' · ')+'.');
     }catch(e){}
   }
 })();

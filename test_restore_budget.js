@@ -18,7 +18,7 @@ ok('single cal-slot return', (html.match(/return `<div class="cal-slot/g) || [])
 ok('no leftover duplicate return', !/cs-name\$\{hourLabel\(h\)\} \$\{nm\}\$\{\(t\.withGuest[\s\S]{0,200}return `<div class="cal-slot/.test(html));
 ok('save pushes budget', /function save\(\)\{[\s\S]*fbPushBudget/.test(html));
 ok('backup UI', html.includes('Pobierz kopię') && html.includes('Wczytaj kopię') && html.includes('function downloadBudgetBackup'));
-ok('cloud backup collection', sync.includes("collection('budgetBackups')") && sync.includes('function fbRestoreBudgetIfNeeded') && sync.includes('function fbIsDemoBudget'));
+ok('cloud backup on holdings', sync.includes("collection('holdings')") && sync.includes('budgetJson') && sync.includes('function fbApplyCloudBudget') && sync.includes('merge: true') && !sync.includes("collection('budgetBackups')"));
 ok('never push demo', /if\(fbIsDemoBudget\(list\)\) return;/.test(sync));
 ok('recovery helpers', html.includes('function applySeptemberGrafikRecovery') && html.includes('Magda Krawiec') && html.includes('Radosław Bąk'));
 ok('loads fb-sync.js', /<script src="fb-sync\.js"><\/script>/.test(html));
