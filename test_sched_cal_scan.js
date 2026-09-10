@@ -23,6 +23,8 @@ ok('paste + apply', html.includes('function pasteSchedCalendar') && html.include
 ok('drop on scan card', html.includes("getElementById('sched-cal-scan-card')") && html.includes("scanSchedCalendarBlob"));
 ok('presence review no amount', html.includes('id="sched-cal-people"') && html.includes('Dodaj obecność do grafiku') && !html.includes('data-f="amt"'));
 ok('people once', html.includes('function uniqueSchedCalPeople') && html.includes('function fillEmptyPlansForClient') && html.includes('function renameSchedCalPerson'));
+ok('person 1 or 2 + pay', html.includes('setSchedCalPersonGuest') && html.includes('setSchedCalPersonPay') && html.includes('💵+🏦 Oba') && html.includes('1 osoba') && html.includes('2 osoby'));
+ok('split always shown', html.includes("id=\"sched-pay-split\"") && html.includes("onclick=\"setSchedPay('split')\"") && !/sched-pay-split[\s\S]{0,80}display:none/.test(html));
 ok('import amt 0', html.includes("amt: 0") && html.includes('function insertSchedulePlan'));
 ok('training includes 0-amt plan', /function isTrainingIncome\(t\)\{\s*return t && t\.cat==='Plan treningowy';\s*\}/.test(html));
 ok('confirm blocks missing amt', html.includes('Najpierw wpisz kwotę'));

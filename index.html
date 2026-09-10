@@ -141,16 +141,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .sched-cal-row{display:grid;grid-template-columns:22px 1fr 88px 1fr;gap:8px;align-items:center}
 .sched-cal-row input,.sched-cal-row select{width:100%;padding:7px 8px;border:1px solid var(--border2);border-radius:var(--rsm);background:var(--bg2);color:var(--text);font-size:12px;font-family:inherit}
 .sched-cal-row .sc-name{font-size:13px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sched-cal-people{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px}
-.sched-cal-person{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--rsm);padding:4px 8px 4px 10px}
-.sched-cal-person input{border:none;background:transparent;min-width:72px;width:110px;padding:4px 0;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.sched-cal-people{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin:8px 0 4px}
+.sched-cal-person{display:flex;flex-direction:column;gap:6px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--rsm);padding:10px}
+.sched-cal-person .sc-person-top{display:flex;align-items:center;gap:6px}
+.sched-cal-person input[type="text"]{border:none;background:transparent;min-width:0;flex:1;padding:4px 0;color:var(--text);font-size:14px;font-weight:600;font-family:inherit;outline:none}
 .sched-cal-person small{color:var(--text3);font-size:11px;white-space:nowrap}
+.sched-cal-person .seg{gap:4px}
+.sched-cal-person .btn-s{flex:1;padding:6px 8px;font-size:11px}
 .sc-sublbl{font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px}
 #sched-cal-scan-card.over{outline:2px dashed var(--accent);background:var(--green-bg)}
 @media(max-width:700px){
   .sched-cal-row{grid-template-columns:22px 1fr 88px}
   .sched-cal-row .sc-name{grid-column:2/-1}
-  .sched-cal-person input{width:90px}
+  .sched-cal-people{grid-template-columns:1fr}
 }
 @media(max-width:768px){
   .rcp-actions{flex-direction:column}
@@ -488,7 +491,7 @@ body.sched-dragging{touch-action:none;user-select:none}
 
   <div class="card form-card" id="sched-cal-scan-card" style="margin-bottom:14px">
     <div class="sec-lbl">📷 Zrzut z kalendarza (One Calendar)</div>
-    <div class="tip">Zrób screen treningów w One Calendar i wrzuć tu. Na liście skupiamy się na <strong>osobach raz</strong> i ich <strong>obecności</strong> (dzień + godzina) — bez kwoty. Złotówki, ile osób na treningu i przelew dopiszesz później na grafiku: kliknij jedną osobę, reszta jej pustych slotów weźmie to samo.</div>
+    <div class="tip">Zrób screen i wrzuć tu. Osoby lądują na grafiku. Przy każdej ustawiasz: <strong>1 albo 2 osoby</strong> oraz <strong>gotówka / przelew / oba</strong>. Kwotę dopiszesz klikając wpis na siatce.</div>
     <div class="rcp-actions">
       <label class="btn-p" style="margin:0;cursor:pointer">Zrób zdjęcie
         <input id="sched-cal-camera" type="file" accept="image/*" capture="environment" hidden onchange="scanSchedCalendarFile(this)">
@@ -501,7 +504,7 @@ body.sched-dragging{touch-action:none;user-select:none}
     <div class="rcp-thumb" id="sched-cal-thumb"><img id="sched-cal-thumb-img" alt="Zrzut kalendarza"></div>
     <span class="fstatus" id="sched-cal-status"></span>
     <div id="sched-cal-review" style="display:none;margin-top:12px">
-      <div class="sc-sublbl">Osoby — imię poprawiasz raz</div>
+      <div class="sc-sublbl">Osoby — 1 lub 2 os. · gotówka / przelew / oba</div>
       <div class="sched-cal-people" id="sched-cal-people"></div>
       <div class="sc-sublbl">Obecność na grafiku</div>
       <div class="sched-cal-list" id="sched-cal-rows"></div>
@@ -523,10 +526,10 @@ body.sched-dragging{touch-action:none;user-select:none}
     </div>
     <div class="frow">
       <div class="fg"><label id="sched-amt-lbl">Kwota za trening (zł)</label><input id="sched-amt" type="number" min="0" step="0.01" placeholder="0" oninput="onSchedAmtInput()"></div>
-      <div class="fg"><label>Towarzystwo</label>
+      <div class="fg"><label>Ile osób</label>
         <div class="seg" id="sched-guest-seg">
-          <button type="button" class="btn-s" id="sched-guest-solo" onclick="setSchedGuest(false)" style="flex:1">Sam</button>
-          <button type="button" class="btn-s" id="sched-guest-duo" onclick="setSchedGuest(true)" style="flex:1">Z osobą</button>
+          <button type="button" class="btn-s" id="sched-guest-solo" onclick="setSchedGuest(false)" style="flex:1">1 osoba</button>
+          <button type="button" class="btn-s" id="sched-guest-duo" onclick="setSchedGuest(true)" style="flex:1">2 osoby</button>
         </div>
       </div>
     </div>
@@ -535,7 +538,7 @@ body.sched-dragging{touch-action:none;user-select:none}
         <div class="seg" id="sched-pay-seg">
           <button type="button" class="btn-s" id="sched-pay-cash" onclick="setSchedPay('cash')" style="flex:1">💵 Gotówka</button>
           <button type="button" class="btn-s" id="sched-pay-bank" onclick="setSchedPay('bank')" style="flex:1">🏦 Przelew</button>
-          <button type="button" class="btn-s" id="sched-pay-split" onclick="setSchedPay('split')" style="flex:1.2;display:none" title="Jedna osoba gotówką, druga przelewem">💵+🏦 Różnie</button>
+          <button type="button" class="btn-s" id="sched-pay-split" onclick="setSchedPay('split')" style="flex:1.3" title="Jedna osoba gotówką, druga przelewem">💵+🏦 Oba</button>
           <button type="button" class="btn-s" id="sched-pay-week" onclick="setSchedPay('week')" style="flex:1.2" title="Z góry za ten tydzień — nie dolicza się do dnia">📆 Za tydzień</button>
           <button type="button" class="btn-s" id="sched-pay-month" onclick="setSchedPay('month')" style="flex:1.2" title="Z góry za cały miesiąc — nie dolicza się do dnia">📅 Za miesiąc</button>
         </div>
@@ -1967,9 +1970,14 @@ function schedPayHint(t){
   if(isPrepaidCovered(t)) return 'opłacone';
   if(isMonthPay(t)) return '📅 miesiąc'+(t.src==='cash'?' · 💵':' · 🏦');
   if(isWeekPay(t)) return '📆 tydzień'+(t.src==='cash'?' · 💵':' · 🏦');
-  if(t.src==='split') return '💵 '+fmt(t.cashAmt||0)+' + 🏦 '+fmt(t.bankAmt||0);
-  if(t.src==='cash') return '💵';
-  return '🏦';
+  if(t.src==='split') return (t.amt>0?('💵 '+fmt(t.cashAmt||0)+' + 🏦 '+fmt(t.bankAmt||0)):'💵+🏦 oba');
+  if(t.src==='cash') return '💵 gotówka';
+  return '🏦 przelew';
+}
+function schedSlotPayLabel(t){
+  if(isPrepaidCovered(t)) return schedAmtLabel(t);
+  if(t.amt>0) return fmt(t.amt)+' · '+schedPayHint(t);
+  return schedPayHint(t)+' · uzupełnij kwotę';
 }
 
 function syncSchedForm(){
@@ -2347,7 +2355,10 @@ function updateSchedFormMode(){
   if(cancel) cancel.style.display=editing?'':'none';
   const del=document.getElementById('sched-del-btn');
   if(del) del.style.display=editing?'':'none';
-  if(lbl) lbl.textContent=editing?'Edytuj trening':'Wpisz trening';
+  if(lbl){
+    const nm=((document.getElementById('sched-name')||{}).value||'').trim();
+    lbl.textContent=editing?('Edytuj: '+(nm||'osoba')):'Wpisz trening';
+  }
 }
 
 function editScheduleTx(idx){
@@ -2399,9 +2410,9 @@ function fillEmptyPlansForClient(client, src, exceptIdx){
     if(clientKey(scheduleClientName(t))!==n) return;
     if(t.amt>0) return;
     if(isMonthPay(t) || isWeekPay(t)) return;
-    t.amt=src.amt;
+    if(src.amt>0) t.amt=src.amt;
     t.src=src.src;
-    t.withGuest=!!src.withGuest;
+    t.withGuest=!!src.withGuest || src.src==='split';
     if(src.src==='split'){
       t.cashAmt=src.cashAmt;
       t.bankAmt=src.bankAmt;
@@ -2423,8 +2434,13 @@ function addScheduleEntry(){
   const iso=dateEl.value || toISODate(new Date());
   const client=nameEl.value.trim();
   let amt=parseFloat(String(amtEl.value).replace(',','.'));
+  if(!(amt>0)) amt=0;
   const time=hourEl && hourEl.value ? hourEl.value : hourLabel(SCHED_HOURS[0]);
   if(!client){ setSchedStatus('Podaj imię i nazwisko.', true); return; }
+
+  const editing=schedEditIdx!=null && data[schedEditIdx] && isTrainingIncome(data[schedEditIdx]);
+  const editingPlanned=editing && isTrainingPlanned(data[schedEditIdx]);
+  const allowEmpty=editingPlanned && schedPay!=='month' && schedPay!=='week';
 
   const month=isoToMonthLabel(iso);
   const week=isoWeekKey(iso);
@@ -2456,24 +2472,30 @@ function addScheduleEntry(){
   if(schedPay==='split'){
     const cash=parseFloat(String((document.getElementById('sched-amt-cash')||{}).value||'').replace(',','.'));
     const bank=parseFloat(String((document.getElementById('sched-amt-bank')||{}).value||'').replace(',','.'));
-    if(!(cash>0) || !(bank>0)){ setSchedStatus('Podaj kwotę gotówki i przelewu — po jednej na osobę.', true); return; }
-    rec.cashAmt=round2(cash);
-    rec.bankAmt=round2(bank);
-    rec.amt=round2(rec.cashAmt+rec.bankAmt);
-    rec.withGuest=true;
+    if(!(cash>0) || !(bank>0)){
+      if(!allowEmpty){ setSchedStatus('Podaj kwotę gotówki i przelewu — po jednej na osobę.', true); return; }
+      rec.src='split';
+      rec.withGuest=true;
+      rec.amt=0;
+    } else {
+      rec.cashAmt=round2(cash);
+      rec.bankAmt=round2(bank);
+      rec.amt=round2(rec.cashAmt+rec.bankAmt);
+      rec.withGuest=true;
+    }
     rec.monthPay=false;
     rec.weekPay=false;
     rec.monthCovered=coverExisting;
     rec.weekCovered=coverWeek;
   } else if(coverExisting){
-    if(!(amt>0)){ setSchedStatus('Podaj stawkę za trening (info — nie wejdzie do dnia).', true); return; }
+    if(!(amt>0) && !allowEmpty){ setSchedStatus('Podaj stawkę za trening (info — nie wejdzie do dnia).', true); return; }
     rec.amt=amt;
     rec.monthCovered=true;
     rec.weekCovered=false;
     rec.monthPay=false;
     rec.weekPay=false;
   } else if(coverWeek){
-    if(!(amt>0)){ setSchedStatus('Podaj stawkę za trening (info — nie wejdzie do dnia).', true); return; }
+    if(!(amt>0) && !allowEmpty){ setSchedStatus('Podaj stawkę za trening (info — nie wejdzie do dnia).', true); return; }
     rec.amt=amt;
     rec.weekCovered=true;
     rec.monthCovered=false;
@@ -2491,11 +2513,9 @@ function addScheduleEntry(){
     rec.monthPay=false;
     rec.monthCovered=false;
     rec.weekCovered=false;
-  } else if(!(amt>0)){
+  } else if(!(amt>0) && !allowEmpty){
     setSchedStatus('Podaj kwotę za trening.', true); return;
   }
-
-  const editing=schedEditIdx!=null && data[schedEditIdx] && isTrainingIncome(data[schedEditIdx]);
   if(editing && hasTrainingAt(iso, rec.time, client, schedEditIdx)){
     setSchedStatus('Ten trening już jest w '+rec.time+' · '+formatDayLabel(iso)+'.', true); return;
   }
@@ -2523,8 +2543,11 @@ function addScheduleEntry(){
   if(rec.monthPay) bits.push('📅 za miesiąc (nie w dniu)');
   else if(rec.weekPay) bits.push('📆 za tydzień (nie w dniu)');
   else if(rec.monthCovered || rec.weekCovered) bits.push('opłacone z góry (nie w dniu)');
-  else if(rec.src==='split') bits.push('💵'+fmt(rec.cashAmt)+' + 🏦'+fmt(rec.bankAmt));
+  else if(rec.src==='split') bits.push(rec.amt>0?('💵'+fmt(rec.cashAmt)+' + 🏦'+fmt(rec.bankAmt)):'gotówka i przelew');
   else if(rec.src==='bank') bits.push('przelew');
+  else if(rec.src==='cash') bits.push('gotówka');
+  if(rec.withGuest) bits.push('2 os.');
+  else bits.push('1 os.');
   const filled=fillEmptyPlansForClient(client, rec, keepIdx);
   if(filled) bits.push('też '+treningLabel(filled)+' tej osoby');
   setSchedStatus((wasEdit?'✓ Zmieniono: ':'✓ Dodano do planu (jeszcze nie w zarobkach): ')+bits.join(' · '));
@@ -2617,7 +2640,7 @@ function renderSchedule(){
     document.getElementById('sched-pay-bank').classList.toggle('active', schedPay==='bank');
     const splitBtn=document.getElementById('sched-pay-split');
     if(splitBtn){
-      splitBtn.style.display=schedGuest || schedPay==='split' ? '' : 'none';
+      splitBtn.style.display='';
       splitBtn.classList.toggle('active', schedPay==='split');
     }
     const monthBtn=document.getElementById('sched-pay-month');
@@ -2731,8 +2754,8 @@ function renderSchedule(){
         const nm=scheduleClientName(t);
         return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="${isPrepaidCovered(t)?'Opłacone z góry — stawka informacyjna, nie w zarobku dnia':'Kliknij, żeby edytować · przeciągnij, żeby skopiować'}">
           <button class="cs-del" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
-          <span class="cs-name">${hourLabel(h)} ${nm}</span>
-          <span class="cs-amt">${isPrepaidCovered(t)?schedAmtLabel(t):(t.amt>0?fmt(t.amt)+' · '+schedPayHint(t):'uzupełnij kwotę')}</span>
+          <span class="cs-name">${hourLabel(h)} ${nm}${t.withGuest||t.src==='split'?' · 2 os.':' · 1 os.'}</span>
+          <span class="cs-amt">${schedSlotPayLabel(t)}</span>
         </div>`;
       }).join('');
       const cls='cal-cell'+(iso===schedDate && h===schedHour?' sel':'')+(iso===today && h===nowH?' now':'');
@@ -3008,7 +3031,22 @@ function presentSchedCalReview(events){
     peopleEl.innerHTML=people.map(name=>{
       const k=clientKey(name);
       const n=counts[k]||1;
-      return `<label class="sched-cal-person"><input type="text" value="${schedCalEsc(name)}" data-from="${schedCalEsc(k)}" oninput="renameSchedCalPerson(this)"><small>${n}×</small></label>`;
+      const duo=guessSchedGuest(name);
+      return `<div class="sched-cal-person" data-from="${schedCalEsc(k)}">
+        <div class="sc-person-top">
+          <input type="text" value="${schedCalEsc(name)}" data-from="${schedCalEsc(k)}" oninput="renameSchedCalPerson(this)">
+          <small>${n}×</small>
+        </div>
+        <div class="seg">
+          <button type="button" class="btn-s${duo?'':' active'}" data-guest="0" onclick="setSchedCalPersonGuest(this,false)">1 os.</button>
+          <button type="button" class="btn-s${duo?' active':''}" data-guest="1" onclick="setSchedCalPersonGuest(this,true)">2 os.</button>
+        </div>
+        <div class="seg">
+          <button type="button" class="btn-s active" data-pay="cash" onclick="setSchedCalPersonPay(this,'cash')">💵 Gotówka</button>
+          <button type="button" class="btn-s" data-pay="bank" onclick="setSchedCalPersonPay(this,'bank')">🏦 Przelew</button>
+          <button type="button" class="btn-s" data-pay="split" onclick="setSchedCalPersonPay(this,'split')">💵+🏦 Oba</button>
+        </div>
+      </div>`;
     }).join('');
   }
   rows.innerHTML=schedCalDraft.map((ev,i)=>{
@@ -3022,7 +3060,7 @@ function presentSchedCalReview(events){
     </label>`;
   }).join('');
   wrap.style.display='block';
-  setSchedCalStatus('✓ '+people.length+' os. · '+treningLabel(schedCalDraft.length)+' obecności (bez kwoty). Ta sama osoba jest raz na liście imion — na grafiku kliknij ją i dopisz złotówki / ile osób / przelew.');
+  setSchedCalStatus('✓ '+people.length+' os. · '+treningLabel(schedCalDraft.length)+' na grafiku. Przy osobie: 1/2 os. i gotówka / przelew / oba. Kwotę dopiszesz na siatce.');
 }
 function renameSchedCalPerson(el){
   if(!el) return;
@@ -3033,8 +3071,47 @@ function renameSchedCalPerson(el){
     n.textContent=next;
   });
 }
+function setSchedCalPersonGuest(btn, duo){
+  const card=btn && btn.closest('.sched-cal-person');
+  if(!card) return;
+  card.querySelectorAll('[data-guest]').forEach(b=>b.classList.toggle('active', b.getAttribute('data-guest')===(duo?'1':'0')));
+  if(!duo){
+    const split=card.querySelector('[data-pay="split"]');
+    if(split && split.classList.contains('active')){
+      card.querySelectorAll('[data-pay]').forEach(b=>b.classList.toggle('active', b.getAttribute('data-pay')==='cash'));
+    }
+  }
+}
+function setSchedCalPersonPay(btn, pay){
+  const card=btn && btn.closest('.sched-cal-person');
+  if(!card) return;
+  card.querySelectorAll('[data-pay]').forEach(b=>b.classList.toggle('active', b.getAttribute('data-pay')===pay));
+  if(pay==='split'){
+    card.querySelectorAll('[data-guest]').forEach(b=>b.classList.toggle('active', b.getAttribute('data-guest')==='1'));
+  }
+}
+function readSchedCalPersonPrefs(){
+  const prefs={};
+  document.querySelectorAll('#sched-cal-people .sched-cal-person').forEach(card=>{
+    const from=card.getAttribute('data-from');
+    if(!from) return;
+    const nameInp=card.querySelector('input[type="text"]');
+    const guestBtn=card.querySelector('[data-guest].active');
+    const payBtn=card.querySelector('[data-pay].active');
+    let src=(payBtn && payBtn.getAttribute('data-pay'))||'cash';
+    if(src!=='bank' && src!=='split') src='cash';
+    const withGuest=src==='split' || !!(guestBtn && guestBtn.getAttribute('data-guest')==='1');
+    prefs[from]={
+      name: cleanSchedClientName(nameInp && nameInp.value),
+      withGuest,
+      src
+    };
+  });
+  return prefs;
+}
 function readSchedCalDraftFromForm(){
   const rows=[...document.querySelectorAll('#sched-cal-rows .sched-cal-row')];
+  const prefs=readSchedCalPersonPrefs();
   const out=[];
   rows.forEach(row=>{
     const chk=row.querySelector('input[type="checkbox"]');
@@ -3042,11 +3119,15 @@ function readSchedCalDraftFromForm(){
     const iso=(row.querySelector('[data-f="iso"]')||{}).value;
     const time=(row.querySelector('[data-f="time"]')||{}).value;
     const nameEl=row.querySelector('[data-f="name"]');
-    const name=((nameEl && (nameEl.value||nameEl.textContent))||'').trim();
+    const from=(nameEl && nameEl.getAttribute('data-person'))||'';
+    const p=prefs[from]||{};
+    const name=(p.name||((nameEl && (nameEl.value||nameEl.textContent))||'')).trim();
     const n=normalizeSchedCalEvent({date:iso, time, name});
     if(!n) return;
     n.amt=0;
-    n.withGuest=guessSchedGuest(n.name);
+    n.withGuest=p.withGuest!=null?p.withGuest:guessSchedGuest(n.name);
+    n.src=p.src||'cash';
+    if(n.src==='split') n.withGuest=true;
     out.push(n);
   });
   return out;
@@ -3059,6 +3140,7 @@ function insertSchedulePlan(ev){
   const week=isoWeekKey(iso);
   const existingPay=monthPrepaidFor(client, month);
   const existingWeek=weekPrepaidFor(client, week);
+  const src=ev.src==='split'?'split':(ev.src==='bank'?'bank':'cash');
   const rec={
     id: newSchedTxId(),
     date: isoToTxDate(iso),
@@ -3068,8 +3150,8 @@ function insertSchedulePlan(ev){
     cat: 'Plan treningowy',
     amt: 0,
     month,
-    src: 'cash',
-    withGuest: ev.withGuest===true || guessSchedGuest(client),
+    src,
+    withGuest: src==='split' || ev.withGuest===true || guessSchedGuest(client),
     planned: true,
     monthPay: false,
     weekPay: false,
@@ -3094,7 +3176,7 @@ function applySchedCalImport(){
   curMonth=isoToMonthLabel(schedDate);
   const people=uniqueSchedCalPeople(picks);
   setSchedCalStatus(added
-    ? '✓ Obecność: '+treningLabel(added)+(people.length?' · '+people.length+' os.':'')+(skipped?' · pominięto '+skipped+' (już były)':'')+'. Kliknij osobę na grafiku: kwota, ile osób i przelew — raz wejdzie na jej puste treningi.'
+    ? '✓ Na grafiku: '+treningLabel(added)+(people.length?' · '+people.length+' os.':'')+(skipped?' · pominięto '+skipped+' (już były)':'')+'. Kliknij osobę: 1/2 os., gotówka / przelew / oba i kwota.'
     : (skipped?'Te treningi już są w grafiku.':'Nic nie dodano.'));
   if(added){
     document.getElementById('sched-cal-review').style.display='none';
