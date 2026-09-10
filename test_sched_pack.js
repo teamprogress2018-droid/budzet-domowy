@@ -81,7 +81,19 @@ ctx.data = [
   tx(13, '2026-10-06', '10:00', {month: 'Październik 2026'})
 ];
 ctx.assignPackageCoverage();
-ok('legacy month covers same month only', ctx.data[1].monthCovered===true && ctx.data[2].monthCovered===true && !ctx.data[3].monthCovered);
+eq('legacy month covers same month only', {a:!!ctx.data[1].monthCovered, b:!!ctx.data[2].monthCovered, c:!!ctx.data[3].monthCovered}, {a:true, b:true, c:false});
+
+ctx.data = [
+  tx(1, '2026-08-31', '16:00', {monthPay: true, amt: 800, packN: 3, month: 'Sierpień 2026'}),
+  tx(2, '2026-09-02', '16:00'),
+  tx(3, '2026-09-07', '16:00'),
+  tx(4, '2026-09-09', '16:00'),
+  tx(5, '2026-09-14', '16:00')
+];
+ctx.assignPackageCoverage();
+eq('pay packN stays 3 with extra siblings', ctx.data[0].packN, 3);
+eq('only 2 siblings covered for pack of 3', ctx.data.filter(t=>t.packOf===1).length, 2);
+ok('4th sibling not covered', !ctx.data[3].monthCovered && !ctx.data[3].packOf);
 
 ok('suggested default 8', ctx.suggestedPackN('Nikt', '2026-09-01')===8);
 ctx.data = [tx(20,'2026-09-01','12:00',{monthPay:true,amt:400,packN:12})];

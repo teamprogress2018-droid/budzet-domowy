@@ -558,7 +558,7 @@ body.sched-dragging{touch-action:none;user-select:none}
       </div>
     </div>
     <div class="frow" id="sched-pack-row" style="display:none">
-      <div class="fg"><label>Ile treningów w pakiecie</label><input id="sched-pack-n" type="number" min="1" max="60" step="1" placeholder="np. 8" oninput="updateSchedMonthHint()"></div>
+      <div class="fg"><label>Ile treningów w pakiecie</label><input id="sched-pack-n" type="number" min="1" max="60" step="1" placeholder="np. 8" oninput="window._schedPackTouched=true;updateSchedMonthHint()"></div>
     </div>
     <div class="tip" id="sched-month-hint" style="display:none;margin:0 0 10px">Pierwszy wpis w tygodniu to wpłata z góry. Kolejne treningi w tym tygodniu widać ze stawką, ale <strong>nie doliczają się do zarobku dnia</strong>.</div>
     <div class="frow" id="sched-split-row" style="display:none">
@@ -2106,6 +2106,7 @@ function setSchedPay(v){
     if(schedPay==='cash' || schedPay==='bank') schedMonthSrc=schedPay;
     schedPay=v;
     prefillSchedAmtIfEmpty();
+    if(v==='month') window._schedPackTouched=false;
   } else {
     schedPay=v==='bank'?'bank':'cash';
     schedMonthSrc=schedPay;
@@ -2554,7 +2555,7 @@ function updateSchedMonthHint(){
   if(packRow){
     const showPack=schedPay==='month' && !subsequentMonth;
     packRow.style.display=showPack?'':'none';
-    if(showPack && packEl && !String(packEl.value||'').trim()){
+    if(showPack && packEl && !window._schedPackTouched && !String(packEl.value||'').trim() && name){
       if(editingPay && packSizeOf(data[schedEditIdx])>0) packEl.value=packSizeOf(data[schedEditIdx]);
       else packEl.value=suggestedPackN(name, iso);
     }
@@ -2634,6 +2635,7 @@ function editScheduleTx(idx){
   }
   const packEl=document.getElementById('sched-pack-n');
   if(packEl) packEl.value=packSizeOf(t)>0?packSizeOf(t):'';
+  window._schedPackTouched=packSizeOf(t)>0;
   updateSchedFormMode();
   updateSchedMonthHint();
   const form=document.getElementById('sched-entry-card')||document.querySelector('#page-schedule .form-card');
@@ -2786,6 +2788,8 @@ function addScheduleEntry(){
   if(bankEl) bankEl.value='';
   const packEl=document.getElementById('sched-pack-n');
   if(packEl) packEl.value='';
+  window._schedPackTouched=false;
+  schedPay='cash';
   const bits=[time, client];
   if(rec.amt>0) bits.push(fmt(rec.amt));
   if(rec.monthPay) bits.push('📅 pakiet '+(rec.packN||'')+' (nie w dniu)');
@@ -2796,7 +2800,7 @@ function addScheduleEntry(){
   else if(rec.src==='cash') bits.push('gotówka');
   if(rec.withGuest) bits.push('2 os.');
   else bits.push('1 os.');
-  const filled=fillEmptyPlansForClient(client, rec, keepIdx);
+  const filled=(rec.monthPay||rec.weekPay||rec.monthCovered||rec.weekCovered)?0:fillEmptyPlansForClient(client, rec, keepIdx);
   if(filled) bits.push('też '+treningLabel(filled)+' tej osoby');
   setSchedStatus((wasEdit?'✓ Zmieniono: ':'✓ Dodano do planu (jeszcze nie w zarobkach): ')+bits.join(' · '));
   markMonthCoveredSiblings();
@@ -5765,6 +5769,6 @@ function toggleTheme(){
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
-<script src="fb-sync.js"></script>
+<script src="fb-sync-bypass.js"></script>
 </body>
 </html>
