@@ -1,11 +1,10 @@
 // ═══════════════════════════════════════════════════════════
-// FIREBASE — AUTORYZACJA I SYNCHRONIZACJA (debts, impulsePurchases)
+// FIREBASE — AUTORYZACJA I SYNCHRONIZACJA
+// (budzet_v3, debts, impulsePurchases, holdings)
 // ═══════════════════════════════════════════════════════════
-// Podejście: localStorage pozostaje SZYBKĄ warstwą lokalną (apka
-// działa i renderuje się dokładnie jak wcześniej, natychmiastowo).
-// Firestore to warstwa synchronizacji w tle — przy każdym zapisie
-// wysyłamy zmianę do chmury; przy logowaniu ściągamy najnowsze dane
-// z chmury i nadpisujemy nimi localStorage.
+// localStorage zostaje szybką warstwą lokalną. Firestore trzyma
+// kopię całego budżetu, żeby po wyczyszczeniu przeglądarki dało
+// się dane przywrócić. Demo/seed nigdy nie nadpisuje chmury.
 
 const firebaseConfig = {
   apiKey: "AIzaSyD1v6VJuQrg3rZ5bns0ZUgAO_U3UfhRZ94",
@@ -107,6 +106,9 @@ async function fbSyncFromCloud(){
       saveHoldingsData({ stocks: Number(hd.stocks)||0, bitcoin: Number(hd.bitcoin)||0 });
     }
 
+    const restored = await fbRestoreBudgetIfNeeded();
+    if(restored) return;
+
     // Odśwież widok, jeśli akurat na jednej z tych stron
     if(typeof curPage !== 'undefined'){
       if(curPage==='debts') renderDebts();
@@ -114,12 +116,95 @@ async function fbSyncFromCloud(){
       if(curPage==='dashboard') renderDash();
       if(curPage==='expenses' && typeof renderExpenses==='function') renderExpenses();
       if(curPage==='subs' && typeof renderSubs==='function') renderSubs();
+      if(curPage==='schedule' && typeof renderSchedule==='function') renderSchedule();
     }
     fbSetStatus('✓ Zsynchronizowano · ' + fbCurrentUser.email);
+    fbPushBudget();
   } catch(e) {
     console.warn('Synchronizacja z chmury nieudana:', e.message);
     fbSetStatus('⚠️ Brak synchronizacji (offline?)', true);
   }
+}
+
+const FB_BUDGET_EXTRA_KEYS = [
+  'budzet_subs','budzet_holdings','budzet_limits','budzet_goals',
+  'budzet_env','budzet_debts','budzet_impulse','budzet_advisor_chat',
+  'budzet_theme','budzet_debt_strategy'
+];
+
+function fbIsDemoBudget(list){
+  if(!Array.isArray(list) || !list.length) return true;
+  if(list.some(t => t && t.cat==='Plan treningowy' && t.time)) return false;
+  const months = list.map(t => String(t && t.month || ''));
+  if(months.some(m => m && m!=='Kwiecień 2026' && m!=='Maj 2026')) return false;
+  const names = list.map(t => String(t && t.name || ''));
+  const seedHits = ['Temu.com','Plan treningowy — Kowalski','Plan treningowy — Nowak']
+    .filter(n => names.includes(n)).length;
+  return seedHits >= 2 && list.length <= 80;
+}
+
+function fbReadBudgetExtras(){
+  const extras = {};
+  FB_BUDGET_EXTRA_KEYS.forEach(k=>{
+    const v = localStorage.getItem(k);
+    if(v!=null) extras[k] = v;
+  });
+  return extras;
+}
+
+function fbWriteBudgetExtras(extras){
+  if(!extras || typeof extras!=='object') return;
+  FB_BUDGET_EXTRA_KEYS.forEach(k=>{
+    if(typeof extras[k]==='string') localStorage.setItem(k, extras[k]);
+  });
+}
+
+let fbBudgetTimer = null;
+function fbPushBudget(){
+  if(!fbCurrentUser) return;
+  clearTimeout(fbBudgetTimer);
+  fbBudgetTimer = setTimeout(fbPushBudgetNow, 600);
+}
+
+async function fbPushBudgetNow(){
+  if(!fbCurrentUser) return;
+  let list = null;
+  try { list = JSON.parse(localStorage.getItem('budzet_v3')||'null'); } catch(e){ return; }
+  if(fbIsDemoBudget(list)) return;
+  try {
+    await fbDb.collection('budgetBackups').doc(fbCurrentUser.uid).set({
+      ownerUid: fbCurrentUser.uid,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      txCount: Array.isArray(list) ? list.length : 0,
+      json: JSON.stringify(list),
+      extras: fbReadBudgetExtras()
+    });
+    fbSetStatus('✓ Kopia budżetu w chmurze · ' + fbCurrentUser.email);
+  } catch(e){
+    console.warn('Firestore (budgetBackups) błąd zapisu:', e.message);
+    fbSetStatus('⚠️ Nie zapisano kopii budżetu (offline?)', true);
+  }
+}
+
+async function fbRestoreBudgetIfNeeded(){
+  if(!fbCurrentUser) return false;
+  const snap = await fbDb.collection('budgetBackups').doc(fbCurrentUser.uid).get();
+  if(!snap.exists) return false;
+  const cloud = snap.data()||{};
+  let cloudList = null;
+  try { cloudList = JSON.parse(cloud.json||'null'); } catch(e){ return false; }
+  if(fbIsDemoBudget(cloudList)) return false;
+  let local = null;
+  try { local = JSON.parse(localStorage.getItem('budzet_v3')||'null'); } catch(e){}
+  const localDemo = fbIsDemoBudget(local);
+  const cloudN = Array.isArray(cloudList) ? cloudList.length : 0;
+  const localN = Array.isArray(local) ? local.length : 0;
+  if(!localDemo && localN >= cloudN) return false;
+  localStorage.setItem('budzet_v3', cloud.json);
+  fbWriteBudgetExtras(cloud.extras);
+  fbSetStatus('✓ Przywrócono budżet z chmury');
+  location.reload();
+  return true;
 }
 
 // ── WYSYŁANIE ZMIAN DO CHMURY (wywoływane z index.html po każdym zapisie) ──

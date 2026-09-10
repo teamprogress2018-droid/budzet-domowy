@@ -996,6 +996,18 @@ body.sched-dragging{touch-action:none;user-select:none}
       <span class="fstatus" id="imp-status"></span>
     </div>
   </div>
+
+  <div class="card form-card">
+    <div class="sec-lbl">💾 Kopia zapasowa</div>
+    <div class="tip">Transakcje i grafik są w tej przeglądarce. Pobierz plik JSON, żeby ich nie stracić — albo wczytaj kopię, jeśli dane zniknęły. Po zalogowaniu kopia idzie też do chmury.</div>
+    <div class="factions">
+      <button type="button" class="btn-p" onclick="downloadBudgetBackup()">Pobierz kopię</button>
+      <label class="btn-s" style="margin:0;cursor:pointer">Wczytaj kopię
+        <input id="bak-file" type="file" accept="application/json,.json" hidden onchange="loadBudgetBackupFile(this)">
+      </label>
+      <span class="fstatus" id="bak-status"></span>
+    </div>
+  </div>
 </div>
 
 
@@ -1304,7 +1316,10 @@ let data = JSON.parse(localStorage.getItem('budzet_v3')||'null') || SEED;
 let curMonth = 'Maj 2026';
 let charts = {};
 
-function save(){ try{ localStorage.setItem('budzet_v3', JSON.stringify(data)); }catch(e){} }
+function save(){
+  try{ localStorage.setItem('budzet_v3', JSON.stringify(data)); }catch(e){}
+  if(typeof fbPushBudget==='function') fbPushBudget();
+}
 
 const MONTHS_PL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
 const MONTHS_PL_GEN_ASCII = ['stycznia','lutego','marca','kwietnia','maja','czerwca','lipca','sierpnia','wrzesnia','pazdziernika','listopada','grudnia'];
@@ -2317,6 +2332,128 @@ function hasTrainingAt(iso, time, client, exceptIdx){
   const n=clientKey(client);
   return data.some((t,i)=>i!==exceptIdx && isTrainingIncome(t) && txToISO(t)===iso && (t.time||'')===time && clientKey(scheduleClientName(t))===n);
 }
+function recoveredGrafikTx(iso, time, client, extra){
+  extra=extra||{};
+  const src=extra.src||'cash';
+  const rec={
+    id:'recov-'+iso+'-'+time+'-'+clientKey(client),
+    date:isoToTxDate(iso),
+    iso, time,
+    name:'Plan treningowy — '+client,
+    cat:'Plan treningowy',
+    amt:Number(extra.amt)||0,
+    month:isoToMonthLabel(iso),
+    src,
+    withGuest:!!extra.withGuest || src==='split',
+    planned:extra.planned===false?false:true,
+    monthPay:false, weekPay:false, monthCovered:false, weekCovered:false
+  };
+  if(src==='split'){
+    rec.cashAmt=Number(extra.cashAmt)||0;
+    rec.bankAmt=Number(extra.bankAmt)||0;
+    rec.amt=Math.round((rec.cashAmt+rec.bankAmt)*100)/100;
+    rec.withGuest=true;
+  }
+  return rec;
+}
+function septemberGrafikRecoverySlots(){
+  const s=recoveredGrafikTx;
+  return [
+    s('2026-09-01','14:00','Oskar',{amt:120,src:'cash'}),
+    s('2026-09-01','16:00','Filip',{amt:120,src:'cash'}),
+    s('2026-09-01','16:00','Magda Krawiec',{amt:120,src:'bank'}),
+    s('2026-09-01','17:00','Justyna',{amt:170,src:'cash'}),
+    s('2026-09-01','18:00','Agata Wesołowska',{amt:120,src:'cash'}),
+    s('2026-09-01','19:00','Karolina i Przemek',{src:'split',cashAmt:70,bankAmt:70}),
+    s('2026-09-01','20:00','Rafael',{src:'split',cashAmt:85,bankAmt:85}),
+    s('2026-09-02','14:00','Filip',{amt:120,src:'cash'}),
+    s('2026-09-02','17:00','Kowalski',{amt:170,src:'cash'}),
+    s('2026-09-02','19:00','Radek',{amt:140,src:'cash'}),
+    s('2026-09-03','14:00','Oliwia',{amt:120,src:'cash'}),
+    s('2026-09-03','15:00','Ewa i Aneta',{amt:170,src:'cash',withGuest:true}),
+    s('2026-09-03','16:00','Tymon',{amt:120,src:'cash'}),
+    s('2026-09-03','17:00','Sławek i Ula',{amt:170,src:'cash',withGuest:true}),
+    s('2026-09-03','18:00','Justyna Chylińska',{amt:170,src:'cash'}),
+    s('2026-09-03','19:00','Rafael',{src:'split',cashAmt:85,bankAmt:85}),
+    s('2026-09-03','20:00','Radosław Bąk',{amt:120,src:'cash'}),
+    s('2026-09-04','16:00','Mariusz',{amt:120,src:'cash'})
+  ];
+}
+function applySeptemberGrafikRecovery(){
+  try{ if(localStorage.getItem('budzet_recovered_sept2026_w36')) return 0; }catch(e){}
+  const hasSept=data.some(t=>t && t.cat==='Plan treningowy' && String(t.iso|| (typeof txToISO==='function'?txToISO(t):'') ||'').startsWith('2026-09'));
+  if(hasSept){
+    try{ localStorage.setItem('budzet_recovered_sept2026_w36','1'); }catch(e){}
+    return 0;
+  }
+  let n=0;
+  septemberGrafikRecoverySlots().forEach(rec=>{
+    if(hasTrainingAt(rec.iso, rec.time, scheduleClientName(rec))) return;
+    data.push(rec);
+    n++;
+  });
+  if(n){
+    save();
+    schedDate='2026-09-01';
+    try{ localStorage.setItem('budzet_recovered_sept2026_w36','1'); }catch(e){}
+  }
+  return n;
+}
+
+const BUDGET_BACKUP_KEYS=['budzet_v3','budzet_subs','budzet_holdings','budzet_limits','budzet_goals','budzet_env','budzet_debts','budzet_impulse','budzet_advisor_chat','budzet_theme','budzet_debt_strategy'];
+function collectBudgetBackup(){
+  const keys={ budzet_v3: data };
+  BUDGET_BACKUP_KEYS.forEach(k=>{
+    if(k==='budzet_v3') return;
+    const raw=localStorage.getItem(k);
+    if(raw==null) return;
+    try{ keys[k]=JSON.parse(raw); }catch(e){ keys[k]=raw; }
+  });
+  return { v:1, savedAt:new Date().toISOString(), keys };
+}
+function downloadBudgetBackup(){
+  const blob=new Blob([JSON.stringify(collectBudgetBackup(),null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='budzet-domowy-kopia-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),500);
+  const st=document.getElementById('bak-status');
+  if(st){ st.textContent='✓ Pobrano kopię zapasową'; st.className='fstatus'; }
+}
+function applyBudgetBackupPayload(payload){
+  if(!payload || typeof payload!=='object') throw new Error('Nieprawidłowy plik');
+  const keys=payload.keys || payload;
+  const list=keys.budzet_v3;
+  if(!Array.isArray(list)) throw new Error('Brak listy transakcji w pliku');
+  localStorage.setItem('budzet_v3', JSON.stringify(list));
+  Object.keys(keys).forEach(k=>{
+    if(k==='budzet_v3') return;
+    const v=keys[k];
+    if(v==null) return;
+    localStorage.setItem(k, typeof v==='string'?v:JSON.stringify(v));
+  });
+}
+function loadBudgetBackupFile(input){
+  const file=input.files && input.files[0];
+  input.value='';
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(){
+    try{
+      const payload=JSON.parse(reader.result);
+      if(!confirm('Wczytać kopię zapasową? Zastąpi dane w tej przeglądarce.')) return;
+      applyBudgetBackupPayload(payload);
+      location.reload();
+    }catch(e){
+      const st=document.getElementById('bak-status');
+      if(st){ st.textContent='Nie udało się wczytać: '+e.message; st.className='fstatus err'; }
+    }
+  };
+  reader.readAsText(file);
+}
 function timedWeekTrainings(){
   if(!schedDate) schedDate=toISODate(new Date());
   const weekR=schedRange(schedDate,'week');
@@ -3008,10 +3145,13 @@ function renderSchedule(){
         const idx=data.indexOf(t);
         const col=clientColor(scheduleClientName(t));
         const nm=scheduleClientName(t);
-        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="${isMonthCovered(t)?'Klient zapłacił z góry za miesiąc — nie w zarobku dnia':isWeekCovered(t)?'Klient zapłacił z góry za tydzień — nie w zarobku dnia':'Kliknij, żeby edytować · przeciągnij, żeby skopiować'}">
-          <button class="cs-del" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
-          <span class="cs-name">${hourLabel(h)} ${nm}${(t.withGuest||t.src==='split')&&!isPrepaidCovered(t)&&!isMonthPay(t)&&!isWeekPay(t)?' · 2 os.':(!isPrepaidCovered(t)&&!isMonthPay(t)&&!isWeekPay(t)?' · 1 os.':'')}</span>
-        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="${packProgress(t)?('Pakiet '+packProgress(t).used+'/'+packProgress(t).n+' — zostało '+packProgress(t).left):isPrepaidCovered(t)?'Opłacone z góry — stawka informacyjna, nie w zarobku dnia':'Kliknij, żeby edytować · przeciągnij, żeby skopiować'}">
+        const pack=typeof packProgress==='function'?packProgress(t):null;
+        const tip=pack?('Pakiet '+pack.used+'/'+pack.n+' — zostało '+pack.left)
+          :isMonthCovered(t)?'Klient zapłacił z góry za miesiąc — nie w zarobku dnia'
+          :isWeekCovered(t)?'Klient zapłacił z góry za tydzień — nie w zarobku dnia'
+          :isPrepaidCovered(t)?'Opłacone z góry — stawka informacyjna, nie w zarobku dnia'
+          :'Kliknij, żeby edytować · przeciągnij, żeby skopiować';
+        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="${tip}">
           <button class="cs-del" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
           <span class="cs-name">${hourLabel(h)} ${nm}${t.withGuest||t.src==='split'?' · 2 os.':' · 1 os.'}</span>
           ${schedSlotFlag(t)}
@@ -5762,8 +5902,18 @@ function toggleTheme(){
   markMonthCoveredSiblings();
   markWeekCoveredSiblings();
   applyRecurringExpenses();
+  const recoveredGrafik=applySeptemberGrafikRecovery();
+  const monthsAfter=getMonths();
+  if(monthsAfter.includes(nowM)) curMonth=nowM;
+  else if(monthsAfter.length) curMonth=monthsAfter[monthsAfter.length-1];
   renderSidebar();
   renderDash();
+  if(recoveredGrafik && typeof goPage==='function'){
+    try{
+      goPage('schedule');
+      if(typeof setSchedStatus==='function') setSchedStatus('✓ Przywrócono '+recoveredGrafik+' treningów z tygodnia 1–4 września 2026 (z zapisanego grafiku).');
+    }catch(e){}
+  }
 })();
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
