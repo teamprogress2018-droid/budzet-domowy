@@ -207,7 +207,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .cal-slot{border-radius:5px;padding:3px 16px 3px 5px;font-size:10.5px;line-height:1.25;margin-bottom:2px;position:relative;overflow:hidden;cursor:grab;user-select:none}
 .cal-slot.planned{opacity:.82;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
 .cal-slot.monthpay,.cal-slot.weekpay{box-shadow:inset 0 0 0 2px var(--amber)}
-.cal-slot.covered{opacity:.7}
+.cal-slot.covered{opacity:.9;box-shadow:inset 0 0 0 2px var(--amber)}
 .cal-chip.planned{opacity:.8}
 .cal-chip.monthpay,.cal-chip.weekpay,.cal-chip.covered{font-style:italic}
 .cal-h .cal-earn.plan{color:var(--text2);font-weight:500}
@@ -447,6 +447,11 @@ body.sched-dragging{touch-action:none;user-select:none}
     <div class="mc"><div class="ml">Gotówka przychód</div><div class="mv b" id="inc-cash">—</div><div class="ms">wpisane ręcznie</div></div>
   </div>
 
+  <div class="mg mg-2" style="margin-bottom:18px">
+    <div class="mc"><div class="ml">Treningi gotówka</div><div class="mv b" id="inc-train-cash">—</div><div class="ms" id="inc-train-cash-n">z grafiku, po zatwierdzeniu dnia</div></div>
+    <div class="mc"><div class="ml">Treningi przelew</div><div class="mv g" id="inc-train-bank">—</div><div class="ms" id="inc-train-bank-n">z grafiku, po zatwierdzeniu dnia</div></div>
+  </div>
+
   <div class="src-grid" id="inc-sources"></div>
 
   <div class="g2">
@@ -468,9 +473,9 @@ body.sched-dragging{touch-action:none;user-select:none}
   </div>
 
   <div class="mg mg-3" style="margin-bottom:14px">
-    <div class="mc"><div class="ml">Plan dnia</div><div class="mv g" id="sched-sum-day">—</div><div class="ms" id="sched-sum-day-n"></div></div>
-    <div class="mc"><div class="ml">Plan tygodnia</div><div class="mv g" id="sched-sum-week">—</div><div class="ms" id="sched-sum-week-n"></div></div>
-    <div class="mc"><div class="ml">Plan miesiąca</div><div class="mv g" id="sched-sum-month">—</div><div class="ms" id="sched-sum-month-n"></div></div>
+    <div class="mc"><div class="ml">Przychód dnia</div><div class="mv g" id="sched-sum-day">—</div><div class="ms" id="sched-sum-day-n"></div></div>
+    <div class="mc"><div class="ml">Przychód tygodnia</div><div class="mv g" id="sched-sum-week">—</div><div class="ms" id="sched-sum-week-n"></div></div>
+    <div class="mc"><div class="ml">Przychód miesiąca</div><div class="mv g" id="sched-sum-month">—</div><div class="ms" id="sched-sum-month-n"></div></div>
   </div>
 
   <div class="card card-p" style="margin-bottom:14px">
@@ -1376,6 +1381,13 @@ function cashIncomeOf(t){
   if(t.src==='split') return Math.max(0, Number(t.cashAmt)||0);
   return t.src==='cash' ? t.amt : 0;
 }
+function bankIncomeOf(t){
+  if(!t || !(t.amt>0) || t.planned===true) return 0;
+  if(t.monthCovered===true || t.weekCovered===true) return 0;
+  if(typeof isPrepaidCovered==='function' && isPrepaidCovered(t)) return 0;
+  if(t.src==='split') return Math.max(0, Number(t.bankAmt)||0);
+  return t.src==='cash' ? 0 : t.amt;
+}
 
 function getHoldings(){
   try {
@@ -1569,7 +1581,10 @@ function renderDash(){
   const train = (bySrc['Plan treningowy']||0);
   const otherInc = inc - train;
   document.getElementById('d-s-train').textContent = fmt(train);
-  document.getElementById('d-s-train-s').textContent = tx.filter(t=>t.cat==='Plan treningowy'&&isIncome(t)).length+' klientów';
+  const trainTx=tx.filter(t=>t.cat==='Plan treningowy'&&isIncome(t));
+  const trainCash=trainTx.reduce((s,t)=>s+cashIncomeOf(t),0);
+  const trainBank=trainTx.reduce((s,t)=>s+bankIncomeOf(t),0);
+  document.getElementById('d-s-train-s').textContent = trainTx.length+' treningów · 💵 '+fmt(trainCash)+' · 🏦 '+fmt(trainBank);
   document.getElementById('d-s-other').textContent = fmt(otherInc);
   document.getElementById('d-s-other-s').textContent = tx.filter(t=>isIncome(t)&&t.cat!=='Plan treningowy').length+' pozycji';
 
@@ -1646,6 +1661,15 @@ function renderIncome(){
   document.getElementById('inc-total').textContent = fmt(inc);
   document.getElementById('inc-bank').textContent = fmt(bankInc);
   document.getElementById('inc-cash').textContent = fmt(cashInc);
+  const trainTx=tx.filter(t=>t.cat==='Plan treningowy' && isIncome(t));
+  const trainCash=trainTx.reduce((s,t)=>s+cashIncomeOf(t),0);
+  const trainBank=trainTx.reduce((s,t)=>s+bankIncomeOf(t),0);
+  const trainCashN=trainTx.filter(t=>cashIncomeOf(t)>0).length;
+  const trainBankN=trainTx.filter(t=>bankIncomeOf(t)>0).length;
+  document.getElementById('inc-train-cash').textContent=fmt(trainCash);
+  document.getElementById('inc-train-bank').textContent=fmt(trainBank);
+  document.getElementById('inc-train-cash-n').textContent=trainCashN?treningLabel(trainCashN)+' gotówką':'brak w tym miesiącu';
+  document.getElementById('inc-train-bank-n').textContent=trainBankN?treningLabel(trainBankN)+' przelewem':'brak w tym miesiącu';
 
   // Source cards
   const srcMap = {};
@@ -1656,11 +1680,14 @@ function renderIncome(){
   });
   const srcHtml = Object.entries(srcMap).sort((a,b)=>b[1].total-a[1].total).map(([cat,{total,count}])=>{
     const s = INC_SOURCES[cat]||{label:cat,icon:'💰',color:'#64748B'};
+    const extra=cat==='Plan treningowy'
+      ? `<div class="s-count">💵 ${fmt(trainCash)} gotówka · 🏦 ${fmt(trainBank)} przelew</div>`
+      : `<div class="s-count">${count} transakcji</div>`;
     return `<div class="src-card">
       <div class="s-icon">${s.icon}</div>
       <div class="s-label">${s.label}</div>
       <div class="s-val">${fmt(total)}</div>
-      <div class="s-count">${count} transakcji</div>
+      ${extra}
     </div>`;
   }).join('');
   document.getElementById('inc-sources').innerHTML = srcHtml||'<p style="color:var(--text3);font-size:13px;padding:12px">Brak przychodów w tym miesiącu</p>';
@@ -1806,7 +1833,8 @@ function markWeekCoveredSiblings(){
   return n;
 }
 function schedAmtLabel(t){
-  if(isPrepaidCovered(t)) return (t.amt>0?fmt(t.amt)+' · ':'')+'opłacone';
+  if(isMonthCovered(t)) return (t.amt>0?fmt(t.amt)+' · ':'')+'📅 z góry za miesiąc';
+  if(isWeekCovered(t)) return (t.amt>0?fmt(t.amt)+' · ':'')+'📆 z góry za tydzień';
   return t.amt>0?fmt(t.amt):'—';
 }
 function trainingDayAmt(t){
@@ -1819,6 +1847,16 @@ function trainingMonthAmt(t){
 }
 function sumTrainingDay(list){ return list.reduce((s,t)=>s+trainingDayAmt(t),0); }
 function sumTrainingMonth(list){ return list.reduce((s,t)=>s+trainingMonthAmt(t),0); }
+function sumTrainingCashBank(list, dayOnly){
+  let cash=0, bank=0;
+  (list||[]).forEach(t=>{
+    if(isTrainingPlanned(t)) return;
+    if(dayOnly && !(trainingDayAmt(t)>0)) return;
+    cash+=cashIncomeOf(t);
+    bank+=bankIncomeOf(t);
+  });
+  return {cash, bank};
+}
 function migrateSchedulePlanned(){
   const today=toISODate(new Date());
   let n=0;
@@ -1967,7 +2005,8 @@ function onSchedSplitEdit(which){
   }
 }
 function schedPayHint(t){
-  if(isPrepaidCovered(t)) return 'opłacone';
+  if(isMonthCovered(t)) return '📅 z góry za miesiąc';
+  if(isWeekCovered(t)) return '📆 z góry za tydzień';
   if(isMonthPay(t)) return '📅 miesiąc'+(t.src==='cash'?' · 💵':' · 🏦');
   if(isWeekPay(t)) return '📆 tydzień'+(t.src==='cash'?' · 💵':' · 🏦');
   if(t.src==='split') return (t.amt>0?('💵 '+fmt(t.cashAmt||0)+' + 🏦 '+fmt(t.bankAmt||0)):'💵+🏦 oba');
@@ -1978,6 +2017,11 @@ function schedSlotPayLabel(t){
   if(isPrepaidCovered(t)) return schedAmtLabel(t);
   if(t.amt>0) return fmt(t.amt)+' · '+schedPayHint(t);
   return schedPayHint(t)+' · uzupełnij kwotę';
+}
+function schedSlotWhoHint(t){
+  if(isMonthCovered(t) || isMonthPay(t)) return isMonthPay(t)?'📅 wpłata za miesiąc':'📅 z góry za miesiąc';
+  if(isWeekCovered(t) || isWeekPay(t)) return isWeekPay(t)?'📆 wpłata za tydzień':'📆 z góry za tydzień';
+  return (t.withGuest||t.src==='split')?'2 os.':'1 os.';
 }
 
 function syncSchedForm(){
@@ -2663,17 +2707,20 @@ function renderSchedule(){
   const dayEarned=sumTrainingDay(dayList.filter(t=>!isTrainingPlanned(t)));
   const weekEarned=sumTrainingMonth(weekList.filter(t=>!isTrainingPlanned(t)));
   const monthEarned=sumTrainingMonth(monthList.filter(t=>!isTrainingPlanned(t)));
-  const dayPlan=sumTrainingDay(dayList);
-  const weekPlan=sumTrainingMonth(weekList);
-  const monthPlan=sumTrainingMonth(monthList);
+  const dayPlanLeft=sumTrainingDay(dayList.filter(isTrainingPlanned));
+  const weekPlanLeft=sumTrainingMonth(weekList.filter(isTrainingPlanned));
+  const monthPlanLeft=sumTrainingMonth(monthList.filter(isTrainingPlanned));
+  const dayPay=sumTrainingCashBank(dayList, true);
+  const weekPay=sumTrainingCashBank(weekList, false);
+  const monthPaySplit=sumTrainingCashBank(monthList, false);
   const dayMonthPay=dayList.filter(isMonthPay).reduce((s,t)=>s+(t.amt||0),0);
   const dayWeekPay=dayList.filter(isWeekPay).reduce((s,t)=>s+(t.amt||0),0);
-  document.getElementById('sched-sum-day').textContent=fmt(dayPlan);
-  document.getElementById('sched-sum-day-n').textContent=treningLabel(dayList.length)+' · '+formatDayLabel(schedDate)+' · w przychodach: '+fmt(dayEarned)+(dayWeekPay?' · tydzień '+fmt(dayWeekPay):'')+(dayMonthPay?' · miesiąc '+fmt(dayMonthPay):'');
-  document.getElementById('sched-sum-week').textContent=fmt(weekPlan);
-  document.getElementById('sched-sum-week-n').textContent=treningLabel(weekList.length)+' · '+weekR.label+' · w przychodach: '+fmt(weekEarned);
-  document.getElementById('sched-sum-month').textContent=fmt(monthPlan);
-  document.getElementById('sched-sum-month-n').textContent=treningLabel(monthList.length)+' · '+monthR.label+' · w przychodach: '+fmt(monthEarned);
+  document.getElementById('sched-sum-day').textContent=fmt(dayEarned);
+  document.getElementById('sched-sum-day-n').textContent='💵 '+fmt(dayPay.cash)+' · 🏦 '+fmt(dayPay.bank)+(dayPlanLeft?' · plan '+fmt(dayPlanLeft):'')+(dayWeekPay?' · wpłata tyg. '+fmt(dayWeekPay):'')+(dayMonthPay?' · wpłata mies. '+fmt(dayMonthPay):'')+' · '+treningLabel(dayList.length);
+  document.getElementById('sched-sum-week').textContent=fmt(weekEarned);
+  document.getElementById('sched-sum-week-n').textContent='💵 '+fmt(weekPay.cash)+' · 🏦 '+fmt(weekPay.bank)+(weekPlanLeft?' · plan '+fmt(weekPlanLeft):'')+' · '+treningLabel(weekList.length);
+  document.getElementById('sched-sum-month').textContent=fmt(monthEarned);
+  document.getElementById('sched-sum-month-n').textContent='💵 '+fmt(monthPaySplit.cash)+' · 🏦 '+fmt(monthPaySplit.bank)+(monthPlanLeft?' · plan '+fmt(monthPlanLeft):'')+' · '+treningLabel(monthList.length);
   const confirmBtn=document.getElementById('sched-confirm-day-btn');
   const pendingDay=dayList.filter(isTrainingPlanned);
   if(confirmBtn){
@@ -2752,9 +2799,9 @@ function renderSchedule(){
         const idx=data.indexOf(t);
         const col=clientColor(scheduleClientName(t));
         const nm=scheduleClientName(t);
-        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="${isPrepaidCovered(t)?'Opłacone z góry — stawka informacyjna, nie w zarobku dnia':'Kliknij, żeby edytować · przeciągnij, żeby skopiować'}">
+        return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="${isMonthCovered(t)?'Klient zapłacił z góry za miesiąc — nie w zarobku dnia':isWeekCovered(t)?'Klient zapłacił z góry za tydzień — nie w zarobku dnia':'Kliknij, żeby edytować · przeciągnij, żeby skopiować'}">
           <button class="cs-del" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
-          <span class="cs-name">${hourLabel(h)} ${nm}${t.withGuest||t.src==='split'?' · 2 os.':' · 1 os.'}</span>
+          <span class="cs-name">${hourLabel(h)} ${nm} · ${schedSlotWhoHint(t)}</span>
           <span class="cs-amt">${schedSlotPayLabel(t)}</span>
         </div>`;
       }).join('');
