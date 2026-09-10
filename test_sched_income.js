@@ -20,7 +20,8 @@ function eq(name, got, want) {
 
 ok('grafik przychód dnia/tygodnia', html.includes('Przychód dnia') && html.includes('Przychód tygodnia') && html.includes('id="sched-sum-day"'));
 ok('przychody treningi split', html.includes('id="inc-train-cash"') && html.includes('id="inc-train-bank"') && html.includes('Treningi gotówka') && html.includes('Treningi przelew'));
-ok('prepaid month on grid', html.includes('📅 z góry za miesiąc') && html.includes('Klient zapłacił z góry za miesiąc'));
+ok('prepaid month on grid', html.includes('📅 z góry za miesiąc') && html.includes('function schedSlotFlag') && html.includes('cs-flag') && html.includes('Klient zapłacił z góry za miesiąc'));
+ok('month pay hint', html.includes('wpłata z góry za cały miesiąc') && html.includes('prefillSchedAmtIfEmpty'));
 ok('cash+bank helpers', html.includes('function cashIncomeOf') && html.includes('function bankIncomeOf') && html.includes('function sumTrainingCashBank'));
 
 const start = html.indexOf('function cashIncomeOf');

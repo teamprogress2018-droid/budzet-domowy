@@ -207,7 +207,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .cal-slot{border-radius:5px;padding:3px 16px 3px 5px;font-size:10.5px;line-height:1.25;margin-bottom:2px;position:relative;overflow:hidden;cursor:grab;user-select:none}
 .cal-slot.planned{opacity:.82;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
 .cal-slot.monthpay,.cal-slot.weekpay{box-shadow:inset 0 0 0 2px var(--amber)}
-.cal-slot.covered{opacity:.9;box-shadow:inset 0 0 0 2px var(--amber)}
+.cal-slot.covered{opacity:1;box-shadow:inset 0 0 0 2px var(--amber)}
+.cal-slot .cs-flag{display:block;font-weight:800;font-size:9.5px;letter-spacing:.03em;text-transform:uppercase;line-height:1.3;margin-top:1px}
 .cal-chip.planned{opacity:.8}
 .cal-chip.monthpay,.cal-chip.weekpay,.cal-chip.covered{font-style:italic}
 .cal-h .cal-earn.plan{color:var(--text2);font-weight:500}
@@ -1965,12 +1966,25 @@ function setSchedPay(v){
   } else if(v==='month' || v==='week'){
     if(schedPay==='cash' || schedPay==='bank') schedMonthSrc=schedPay;
     schedPay=v;
+    prefillSchedAmtIfEmpty();
   } else {
     schedPay=v==='bank'?'bank':'cash';
     schedMonthSrc=schedPay;
   }
   renderSchedule();
   if(schedPay==='split') fillSchedSplitFromTotal();
+  if(schedPay==='month' || schedPay==='week'){
+    const amtEl=document.getElementById('sched-amt');
+    if(amtEl){ amtEl.focus(); amtEl.select(); }
+  }
+}
+function prefillSchedAmtIfEmpty(){
+  const amtEl=document.getElementById('sched-amt');
+  if(!amtEl) return;
+  if(parseFloat(String(amtEl.value||'').replace(',','.'))>0) return;
+  const name=((document.getElementById('sched-name')||{}).value||'').trim();
+  const last=typeof lastTrainingAmtFor==='function'?lastTrainingAmtFor(name):0;
+  if(last>0) amtEl.value=last;
 }
 function schedTotalAmt(){
   const el=document.getElementById('sched-amt');
@@ -2018,10 +2032,12 @@ function schedSlotPayLabel(t){
   if(t.amt>0) return fmt(t.amt)+' · '+schedPayHint(t);
   return schedPayHint(t)+' · uzupełnij kwotę';
 }
-function schedSlotWhoHint(t){
-  if(isMonthCovered(t) || isMonthPay(t)) return isMonthPay(t)?'📅 wpłata za miesiąc':'📅 z góry za miesiąc';
-  if(isWeekCovered(t) || isWeekPay(t)) return isWeekPay(t)?'📆 wpłata za tydzień':'📆 z góry za tydzień';
-  return (t.withGuest||t.src==='split')?'2 os.':'1 os.';
+function schedSlotFlag(t){
+  if(isMonthPay(t)) return '<span class="cs-flag">📅 wpłata za miesiąc</span>';
+  if(isMonthCovered(t)) return '<span class="cs-flag">📅 z góry za miesiąc</span>';
+  if(isWeekPay(t)) return '<span class="cs-flag">📆 wpłata za tydzień</span>';
+  if(isWeekCovered(t)) return '<span class="cs-flag">📆 z góry za tydzień</span>';
+  return '';
 }
 
 function syncSchedForm(){
@@ -2381,7 +2397,7 @@ function updateSchedMonthHint(){
     monthHint.innerHTML='Pakiet na ten tydzień jest już opłacony. Kwota to stawka za jeden trening (informacyjnie) — <strong>nie dolicza się do zarobku dnia</strong>.';
   } else if(schedPay==='month'){
     monthHint.style.display='';
-    monthHint.innerHTML='Pierwszy wpis w miesiącu to wpłata z góry. W kolejnych tygodniach widać stawkę za trening, ale <strong>nie dolicza się do zarobku dnia</strong>.';
+    monthHint.innerHTML='To <strong>wpłata z góry za cały miesiąc</strong>. Wpisz kwotę i zapisz — na grafiku przy każdym treningu tej osoby w tym miesiącu pojawi się <strong>📅 Z GÓRY ZA MIESIĄC</strong> (nie dolicza się do zarobku dnia).';
   } else if(schedPay==='week'){
     monthHint.style.display='';
     monthHint.innerHTML='Pierwszy wpis w tygodniu to wpłata z góry. Kolejne treningi w tym tygodniu widać ze stawką, ale <strong>nie doliczają się do zarobku dnia</strong>. Przy kopiowaniu na następny tydzień znów pojawi się wpłata tygodniowa.';
@@ -2546,7 +2562,7 @@ function addScheduleEntry(){
     rec.monthPay=false;
     rec.weekPay=false;
   } else if(schedPay==='month'){
-    if(!(amt>0)){ setSchedStatus('Podaj kwotę za cały miesiąc.', true); return; }
+    if(!(amt>0)){ setSchedStatus('Wpisz kwotę wpłaty z góry za miesiąc. Potem na grafiku przy tej osobie widać 📅 Z GÓRY ZA MIESIĄC.', true); const a=document.getElementById('sched-amt'); if(a) a.focus(); return; }
     rec.monthPay=true;
     rec.weekPay=false;
     rec.monthCovered=false;
@@ -2773,7 +2789,7 @@ function renderSchedule(){
     untimedEl.style.display='block';
     untimedEl.innerHTML = 'Bez godziny — przeciągnij na kratkę: '+untimed.map(t=>{
       const idx=data.indexOf(t);
-      return `<span class="cal-chip${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})">${scheduleClientName(t)} ${schedAmtLabel(t)} <button class="tx-del" style="opacity:1;display:inline" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button></span>`;
+      return `<span class="cal-chip${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})">${scheduleClientName(t)} ${schedSlotFlag(t)} ${schedAmtLabel(t)} <button class="tx-del" style="opacity:1;display:inline" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button></span>`;
     }).join(' ');
   } else { untimedEl.style.display='none'; untimedEl.innerHTML=''; }
 
@@ -2801,7 +2817,8 @@ function renderSchedule(){
         const nm=scheduleClientName(t);
         return `<div class="cal-slot${idx===schedEditIdx?' editing':''}${isTrainingPlanned(t)?' planned':''}${isMonthPay(t)?' monthpay':''}${isWeekPay(t)?' weekpay':''}${isPrepaidCovered(t)?' covered':''}" style="background:${col.bg};color:${col.fg}" onpointerdown="schedPointerDown(event,${idx})" onclick="event.stopPropagation();editScheduleTx(${idx})" title="${isMonthCovered(t)?'Klient zapłacił z góry za miesiąc — nie w zarobku dnia':isWeekCovered(t)?'Klient zapłacił z góry za tydzień — nie w zarobku dnia':'Kliknij, żeby edytować · przeciągnij, żeby skopiować'}">
           <button class="cs-del" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();deleteScheduleTx(${idx})" title="Usuń">✕</button>
-          <span class="cs-name">${hourLabel(h)} ${nm} · ${schedSlotWhoHint(t)}</span>
+          <span class="cs-name">${hourLabel(h)} ${nm}${(t.withGuest||t.src==='split')&&!isPrepaidCovered(t)&&!isMonthPay(t)&&!isWeekPay(t)?' · 2 os.':(!isPrepaidCovered(t)&&!isMonthPay(t)&&!isWeekPay(t)?' · 1 os.':'')}</span>
+          ${schedSlotFlag(t)}
           <span class="cs-amt">${schedSlotPayLabel(t)}</span>
         </div>`;
       }).join('');
