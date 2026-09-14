@@ -1818,16 +1818,74 @@ function isWeekCovered(t){
 }
 function isPrepaidCovered(t){ return isMonthCovered(t) || isWeekCovered(t); }
 function clientKey(name){ return String(name||'').trim().toLowerCase(); }
+function foldClientName(name){
+  return clientKey(name)
+    .replace(/[\/,+]+/g,' ')
+    .replace(/\s+i\s+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function sameClient(a, b){
+  const ka=clientKey(a), kb=clientKey(b);
+  if(!ka||!kb) return false;
+  if(ka===kb) return true;
+  if(foldClientName(a)===foldClientName(b)) return true;
+  const shorter=ka.length<=kb.length?ka:kb;
+  const longer=ka.length<=kb.length?kb:ka;
+  if(!longer.startsWith(shorter+' ')) return false;
+  const others=(typeof knownScheduleClients==='function'?knownScheduleClients():[]).filter(n=>{
+    const kn=clientKey(n);
+    if(kn===ka || kn===kb) return false;
+    return kn===shorter || kn.startsWith(shorter+' ');
+  });
+  return others.length===0;
+}
+function canonicalScheduleClient(name){
+  const raw=String(name||'').trim();
+  if(!raw) return raw;
+  const known=knownScheduleClients();
+  const exact=known.find(n=>clientKey(n)===clientKey(raw));
+  if(exact) return exact;
+  const hits=known.filter(n=>sameClient(n, raw));
+  if(hits.length===1) return hits[0];
+  const longer=hits.filter(n=>clientKey(n).length>clientKey(raw).length);
+  if(longer.length===1) return longer[0];
+  return raw;
+}
 function lastTrainingAmtFor(client){
-  const n=clientKey(client);
-  if(!n) return 0;
+  const rate=lastSessionRateFor(client);
+  if(rate && rate.amt>0) return rate.amt;
   let best=null;
   data.forEach(t=>{
-    if(!isTrainingIncome(t) || !(t.amt>0) || clientKey(scheduleClientName(t))!==n) return;
+    if(!isTrainingIncome(t) || !(t.amt>0) || !sameClient(scheduleClientName(t), client)) return;
+    if(isMonthPay(t) || isWeekPay(t)) return;
     const iso=txToISO(t);
     if(!best || String(iso)>String(best.iso)) best={iso, amt:t.amt};
   });
   return best?best.amt:0;
+}
+function lastSessionRateFor(client, exceptIdx){
+  let best=null;
+  data.forEach((t,i)=>{
+    if(i===exceptIdx) return;
+    if(!isTrainingIncome(t) || isMonthPay(t) || isWeekPay(t)) return;
+    if(!sameClient(scheduleClientName(t), client)) return;
+    if(!(t.amt>=1)) return;
+    const iso=txToISO(t);
+    if(!best || String(iso)+'|'+(t.time||'')>String(best.iso)+'|'+(best.time||'')) best={iso, time:t.time, amt:t.amt, src:t.src, withGuest:t.withGuest, cashAmt:t.cashAmt, bankAmt:t.bankAmt};
+  });
+  return best;
+}
+function applySessionRate(t, rate){
+  if(!t || !rate || !(rate.amt>=1) || (t.amt>=1)) return false;
+  t.amt=rate.amt;
+  if(rate.src) t.src=rate.src;
+  if(rate.withGuest!=null) t.withGuest=!!rate.withGuest;
+  if(rate.src==='split'){
+    t.cashAmt=rate.cashAmt;
+    t.bankAmt=rate.bankAmt;
+  }
+  return true;
 }
 function knownScheduleClients(){
   const seen={};
@@ -1839,14 +1897,12 @@ function knownScheduleClients(){
   return Object.keys(seen).sort((a,b)=>a.localeCompare(b,'pl'));
 }
 function monthPrepaidFor(client, month, exceptIdx){
-  const n=clientKey(client);
-  if(!n||!month) return null;
-  return data.find((t,i)=>i!==exceptIdx && isMonthPay(t) && t.month===month && clientKey(scheduleClientName(t))===n) || null;
+  if(!client||!month) return null;
+  return data.find((t,i)=>i!==exceptIdx && isMonthPay(t) && t.month===month && sameClient(scheduleClientName(t), client)) || null;
 }
 function weekPrepaidFor(client, weekKey, exceptIdx){
-  const n=clientKey(client);
-  if(!n||!weekKey) return null;
-  return data.find((t,i)=>i!==exceptIdx && isWeekPay(t) && txWeekKey(t)===weekKey && clientKey(scheduleClientName(t))===n) || null;
+  if(!client||!weekKey) return null;
+  return data.find((t,i)=>i!==exceptIdx && isWeekPay(t) && txWeekKey(t)===weekKey && sameClient(scheduleClientName(t), client)) || null;
 }
 function txSortKey(t){
   return String(txToISO(t)||'')+'|'+(t&&t.time?t.time:'');
@@ -1856,11 +1912,10 @@ function packSizeOf(pay){
   return n>0?n:0;
 }
 function lastPackSizeFor(client){
-  const n=clientKey(client);
-  if(!n) return 0;
+  if(!client) return 0;
   let best=null;
   data.forEach(t=>{
-    if(!isMonthPay(t) || clientKey(scheduleClientName(t))!==n) return;
+    if(!isMonthPay(t) || !sameClient(scheduleClientName(t), client)) return;
     const sz=packSizeOf(t);
     if(!(sz>0)) return;
     const iso=txToISO(t);
@@ -1875,7 +1930,7 @@ function suggestedPackN(client, iso){
   if(!n) return 8;
   const month=iso?isoToMonthLabel(iso):'';
   const cnt=data.filter(t=>{
-    if(!isTrainingIncome(t) || clientKey(scheduleClientName(t))!==n) return false;
+    if(!isTrainingIncome(t) || !sameClient(scheduleClientName(t), client)) return false;
     const ti=txToISO(t);
     if(iso && ti && ti<iso) return false;
     if(month && t.month && t.month!==month) return false;
@@ -1893,10 +1948,9 @@ function packUsedCount(pay, exceptIdx){
   return used;
 }
 function openPackageFor(client, iso, time, exceptIdx){
-  const n=clientKey(client);
-  if(!n||!iso) return null;
+  if(!client||!iso) return null;
   const key=iso+'|'+(time||'');
-  const pays=data.filter((t,i)=>i!==exceptIdx && isMonthPay(t) && clientKey(scheduleClientName(t))===n)
+  const pays=data.filter((t,i)=>i!==exceptIdx && isMonthPay(t) && sameClient(scheduleClientName(t), client))
     .sort((a,b)=>txSortKey(a).localeCompare(txSortKey(b)));
   for(let i=0;i<pays.length;i++){
     const pay=pays[i];
@@ -1931,10 +1985,10 @@ function assignPackageCoverage(){
   pays.forEach(pay=>{
     const sz=packSizeOf(pay);
     if(!(sz>0)) return;
-    const ck=clientKey(scheduleClientName(pay));
+    const ck=scheduleClientName(pay);
     const start=txSortKey(pay);
     const pool=data.filter(t=>{
-      if(!isTrainingIncome(t) || clientKey(scheduleClientName(t))!==ck) return false;
+      if(!isTrainingIncome(t) || !sameClient(scheduleClientName(t), ck)) return false;
       if(txSortKey(t)<start) return false;
       if(consumed.has(t.id) && t!==pay) return false;
       return true;
@@ -1956,6 +2010,7 @@ function assignPackageCoverage(){
         t.packN=sz;
         changed++;
       }
+      if(applySessionRate(t, lastSessionRateFor(ck, data.indexOf(t)))) changed++;
     });
     data.forEach(t=>{
       if(!t || t.packOf!==pay.id) return;
@@ -1967,10 +2022,10 @@ function assignPackageCoverage(){
   });
   pays.forEach(pay=>{
     if(packSizeOf(pay)>0) return;
-    const ck=clientKey(scheduleClientName(pay));
+    const ck=scheduleClientName(pay);
     data.forEach(t=>{
       if(t===pay || !isTrainingIncome(t) || isMonthPay(t) || isWeekPay(t)) return;
-      if(clientKey(scheduleClientName(t))!==ck || t.month!==pay.month) return;
+      if(!sameClient(scheduleClientName(t), ck) || t.month!==pay.month) return;
       if(consumed.has(t.id)) return;
       if(t.monthCovered!==true){ t.monthCovered=true; changed++; }
     });
@@ -2297,7 +2352,7 @@ function addDaysISO(iso, days){
 }
 function newSchedTxId(){
   newSchedTxId.n=(newSchedTxId.n||0)+1;
-  return Date.now()*1000 + newSchedTxId.n;
+  return 's'+Date.now().toString(36)+'-'+newSchedTxId.n;
 }
 function cloneScheduleTx(t, iso, time){
   const month=isoToMonthLabel(iso);
@@ -2356,11 +2411,26 @@ function cloneScheduleTx(t, iso, time){
     c.amt=t.amt;
     c.src=t.src==='cash'?'cash':'bank';
   }
+  if(destOpen){
+    if(packSizeOf(destOpen)>0){
+      c.monthCovered=true;
+      c.monthPay=false;
+      c.weekPay=false;
+      c.weekCovered=false;
+      c.packOf=destOpen.id;
+      c.packN=packSizeOf(destOpen);
+    } else {
+      c.monthCovered=true;
+      c.monthPay=false;
+      c.weekPay=false;
+      c.weekCovered=false;
+    }
+    if(!(c.amt>=1)) applySessionRate(c, lastSessionRateFor(client) || {amt:t.amt, src:t.src, withGuest:t.withGuest, cashAmt:t.cashAmt, bankAmt:t.bankAmt});
+  }
   return c;
 }
 function hasTrainingAt(iso, time, client, exceptIdx){
-  const n=clientKey(client);
-  return data.some((t,i)=>i!==exceptIdx && isTrainingIncome(t) && txToISO(t)===iso && (t.time||'')===time && clientKey(scheduleClientName(t))===n);
+  return data.some((t,i)=>i!==exceptIdx && isTrainingIncome(t) && txToISO(t)===iso && (t.time||'')===time && sameClient(scheduleClientName(t), client));
 }
 function recoveredGrafikTx(iso, time, client, extra){
   extra=extra||{};
@@ -2811,14 +2881,13 @@ function editScheduleTx(idx){
 }
 
 function fillEmptyPlansForClient(client, src, exceptIdx){
-  const n=clientKey(client);
-  if(!n || !src) return 0;
+  if(!client || !src) return 0;
   let count=0;
   data.forEach((t,i)=>{
     if(i===exceptIdx) return;
     if(!isTrainingPlanned(t)) return;
-    if(clientKey(scheduleClientName(t))!==n) return;
-    if(t.amt>0) return;
+    if(!sameClient(scheduleClientName(t), client)) return;
+    if(t.amt>=1) return;
     if(isMonthPay(t) || isWeekPay(t)) return;
     if(src.amt>0) t.amt=src.amt;
     t.src=src.src;
@@ -2842,7 +2911,7 @@ function addScheduleEntry(){
   const amtEl=document.getElementById('sched-amt');
   const hourEl=document.getElementById('sched-hour');
   const iso=dateEl.value || toISODate(new Date());
-  const client=nameEl.value.trim();
+  const client=canonicalScheduleClient(nameEl.value.trim());
   let amt=parseFloat(String(amtEl.value).replace(',','.'));
   if(!(amt>0)) amt=0;
   const time=hourEl && hourEl.value ? hourEl.value : hourLabel(SCHED_HOURS[0]);
@@ -2858,11 +2927,11 @@ function addScheduleEntry(){
   const existingWeek=weekPrepaidFor(client, week, schedEditIdx);
   const editingPay=schedEditIdx!=null && isMonthPay(data[schedEditIdx]);
   const editingWeek=schedEditIdx!=null && isWeekPay(data[schedEditIdx]);
-  const hasWeekSibling=data.some((t,i)=>i!==schedEditIdx && t.cat==='Plan treningowy' && txWeekKey(t)===week && clientKey(scheduleClientName(t))===clientKey(client));
+  const hasWeekSibling=data.some((t,i)=>i!==schedEditIdx && t.cat==='Plan treningowy' && txWeekKey(t)===week && sameClient(scheduleClientName(t), client));
   const coverExisting=!editingPay && !!existingPack;
   const coverWeek=!editingWeek && !coverExisting && (!!existingWeek || (schedPay==='week' && hasWeekSibling));
   const rec={
-    id: Date.now(),
+    id: newSchedTxId(),
     date: isoToTxDate(iso),
     iso,
     time,
@@ -3632,7 +3701,7 @@ function readSchedCalDraftFromForm(){
   return out;
 }
 function insertSchedulePlan(ev){
-  const client=cleanSchedClientName(ev.name);
+  const client=canonicalScheduleClient(cleanSchedClientName(ev.name));
   const iso=ev.iso;
   const time=ev.time;
   const month=isoToMonthLabel(iso);
@@ -3658,6 +3727,8 @@ function insertSchedulePlan(ev){
     weekCovered: !existingPack && !!existingWeek
   };
   if(existingPack && packSizeOf(existingPack)>0) rec.packOf=existingPack.id;
+  const rate=lastSessionRateFor(client);
+  if(rate) applySessionRate(rec, rate);
   data.push(rec);
   return rec;
 }

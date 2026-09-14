@@ -99,5 +99,35 @@ ok('suggested default 8', ctx.suggestedPackN('Nikt', '2026-09-01')===8);
 ctx.data = [tx(20,'2026-09-01','12:00',{monthPay:true,amt:400,packN:12})];
 eq('last pack size', ctx.lastPackSizeFor('Arek'), 12);
 
+ctx.data = [
+  tx(1, '2026-09-01', '07:00', {monthPay:true, amt:800, packN:8, name:'Plan treningowy — Małgosia Trusk'}),
+  tx(2, '2026-09-07', '07:00', {name:'Plan treningowy — Małgosia Trusk', amt:170}),
+  tx(3, '2026-09-09', '07:00', {name:'Plan treningowy — Małgosia Trusk', amt:170}),
+  tx(4, '2026-09-14', '07:00', {name:'Plan treningowy — Małgosia', amt:0}),
+  tx(5, '2026-09-16', '07:00', {name:'Plan treningowy — Małgosia', amt:0})
+];
+ok('małgosia matches trusk', ctx.sameClient('Małgosia','Małgosia Trusk'));
+ctx.assignPackageCoverage();
+ok('next week short name in pack', ctx.data[3].packOf===1 && ctx.data[4].packOf===1);
+eq('countdown 4 then 5', [ctx.packProgress(ctx.data[3]).used, ctx.packProgress(ctx.data[4]).used], [4, 5]);
+eq('left 4 then 3', [ctx.packProgress(ctx.data[3]).left, ctx.packProgress(ctx.data[4]).left], [4, 3]);
+ok('rate copied to empty next week', ctx.data[3].amt===170 && ctx.data[4].amt===170);
+
+ctx.data = [
+  tx(10,'2026-09-01','07:00',{monthPay:true, packN:8, name:'Plan treningowy — Asia Klawer'}),
+  tx(11,'2026-09-01','08:00',{monthPay:true, packN:8, name:'Plan treningowy — Asia Bigdoniuk'}),
+  tx(12,'2026-09-14','07:00',{name:'Plan treningowy — Asia', amt:0})
+];
+ctx.assignPackageCoverage();
+ok('ambiguous Asia stays uncovered', !ctx.data[2].packOf && !ctx.data[2].monthCovered);
+ok('asia klawer not same as bigdoniuk', !ctx.sameClient('Asia Klawer','Asia Bigdoniuk'));
+
+ctx.data = [
+  tx(20,'2026-09-01','08:00',{monthPay:true, amt:400, name:'Plan treningowy — Ola / Agata'}),
+  tx(21,'2026-09-14','08:00',{name:'Plan treningowy — Ola/Agata', amt:0})
+];
+ctx.assignPackageCoverage();
+ok('ola/agata fold covers whole month', !!ctx.data[1].monthCovered);
+
 if (failed) { console.error('\n'+failed+' failed'); process.exit(1); }
 console.log('\nAll sched-pack tests passed');
