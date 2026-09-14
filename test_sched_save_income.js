@@ -75,20 +75,29 @@ function tx(iso, extra) {
   }, extra || {});
 }
 
-ctx.data = [
-  tx('2026-09-03'),
-  tx('2026-09-04', { amt: 0, name: 'Plan treningowy — BrakKwoty' }),
-  tx('2026-09-10'),
-  tx('2026-09-11')
-];
 const today = ctx.toISODate(new Date());
-ok('today is september 2026 in env or later', /^\d{4}-\d{2}-\d{2}$/.test(today));
+ok('today is iso', /^\d{4}-\d{2}-\d{2}$/.test(today));
+function shiftIso(iso, days){
+  const [y,m,d]=iso.split('-').map(Number);
+  const dt=new Date(y, m-1, d+days);
+  return ctx.toISODate(dt);
+}
+const past1=shiftIso(today, -11);
+const pastEmpty=shiftIso(today, -10);
+const todayIso=today;
+const futureIso=shiftIso(today, 1);
+ctx.data = [
+  tx(past1),
+  tx(pastEmpty, { amt: 0, name: 'Plan treningowy — BrakKwoty' }),
+  tx(todayIso),
+  tx(futureIso)
+];
 
 const elapsed = ctx.confirmElapsedScheduleTrainings();
 ok('confirms past with amount', ctx.data[0].planned === false);
 ok('keeps past without amount planned', ctx.data[1].planned === true);
 ok('keeps today/future planned', ctx.data[2].planned === true && ctx.data[3].planned === true);
-ok('counts only past ready', elapsed.n >= 1 && elapsed.n <= 2, JSON.stringify(elapsed)+' today='+today);
+ok('counts only past ready', elapsed.n === 1, JSON.stringify(elapsed)+' today='+today);
 ok('save called', saved);
 
 ctx.data[0].planned = false;
