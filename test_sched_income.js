@@ -27,9 +27,12 @@ ok('cash+bank helpers', html.includes('function cashIncomeOf') && html.includes(
 const start = html.indexOf('function cashIncomeOf');
 const end = html.indexOf('function getHoldings');
 ok('income helpers slice', start>0 && end>start);
+const roundStart = html.indexOf('function round2');
+const roundEnd = html.indexOf('function isIncome');
+ok('round2 helper', roundStart>0 && roundEnd>roundStart);
 const ctx = { console };
 vm.createContext(ctx);
-vm.runInContext(html.slice(start, end), ctx);
+vm.runInContext(html.slice(roundStart, roundEnd) + html.slice(start, end), ctx);
 
 eq('cash solo', ctx.cashIncomeOf({amt:120, src:'cash'}), 120);
 eq('bank solo', ctx.bankIncomeOf({amt:120, src:'bank'}), 120);
