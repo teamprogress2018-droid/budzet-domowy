@@ -174,6 +174,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .btn-danger:hover{background:var(--red-bg)}
 .fstatus{font-size:12px;color:var(--green);margin-left:4px}
 .fstatus.err{color:var(--red)}
+.voice-row{display:flex;gap:8px;align-items:stretch}
+.voice-row input{flex:1;min-width:0}
+.voice-row .btn-s{padding:8px 12px;white-space:nowrap}
+.voice-row .btn-s.listening{background:var(--red);border-color:var(--red);color:#fff}
 .chk{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--text2);margin:2px 0 8px;cursor:pointer;line-height:1.45}
 .chk input{width:16px;height:16px;margin-top:1px;flex-shrink:0;accent-color:var(--accent)}
 .chk small{display:block;font-size:11px;color:var(--text3);font-weight:400}
@@ -909,6 +913,17 @@ body.sched-dragging{touch-action:none;user-select:none}
   <!-- QUICK ADD -->
   <div class="card form-card" style="margin-bottom:16px">
     <div class="sec-lbl">⚡ Szybkie dodanie</div>
+    <div class="frow f1">
+      <div class="fg">
+        <label>🎤 Głosowo albo jednym zdaniem</label>
+        <div class="voice-row">
+          <input type="text" id="q-voice-text" autocomplete="off" placeholder="np. 126,50 Biedronka spożywcze karta dzisiaj" onkeydown="if(event.key==='Enter'){event.preventDefault();voiceFillQuickAdd();}">
+          <button type="button" class="btn-s" id="q-voice-mic" onclick="voiceListen()" title="Podyktuj wydatek" aria-label="Podyktuj wydatek">🎤</button>
+          <button type="button" class="btn-s" onclick="voiceFillQuickAdd()">Wypełnij</button>
+        </div>
+        <span class="fstatus" id="q-voice-status"></span>
+      </div>
+    </div>
     <div class="frow f3">
       <div class="fg">
         <label>Typ</label>
@@ -1167,6 +1182,7 @@ body.sched-dragging{touch-action:none;user-select:none}
 </div>
 
 <script src="tx-core.js"></script>
+<script src="voice-parse.js"></script>
 <script>
 // ═══════════════════════════════════════════════════
 // KATEGORIE I KOLORY
@@ -4312,6 +4328,103 @@ function doQuickAdd(){
   statusEl.className='fstatus';
   setTimeout(()=>{ if(statusEl.textContent.startsWith('✓')) statusEl.textContent=''; },4000);
   renderPage();
+}
+
+// ═══════════════════════════════════════════════════
+// GŁOSOWE / JEDNYM ZDANIEM — tylko wypełnia formularz, zapis robi „Dodaj transakcję”
+// ═══════════════════════════════════════════════════
+function voiceFormValues(p){
+  if(!p) return null;
+  const v={ type: p.paymentSource==='cash' ? 'cash-exp' : 'expense', name: p.merchant||'', amt:'', cat: p.category||'', date:'', month:'' };
+  if(p.amount!=null && isFinite(p.amount)) v.amt=round2(Math.abs(p.amount)).toFixed(2).replace('.',',');
+  const d=(typeof TxCore!=='undefined') ? TxCore.parseDate(p.date) : null;
+  if(d && d.iso){
+    const [y,m,dd]=d.iso.split('-');
+    v.date=dd+'.'+m+'.'+y;
+    v.month=MONTHS_PL[parseInt(m,10)-1]+' '+y;
+    v.iso=d.iso;
+  } else v.dateError=(d && d.error)||'invalid_date';
+  return v;
+}
+
+const VOICE_FIELD_PL={amount:'kwoty',merchant:'nazwy sklepu',category:'kategorii',paymentSource:'płatności (gotówka/karta)'};
+
+function setVoiceStatus(text, isErr){
+  const el=document.getElementById('q-voice-status');
+  if(el){ el.textContent=text; el.className='fstatus'+(isErr?' err':''); }
+}
+
+function voiceFillQuickAdd(textArg){
+  const input=document.getElementById('q-voice-text');
+  const text=String(textArg!=null ? textArg : (input && input.value) || '').trim();
+  if(!text){ setVoiceStatus('Powiedz albo wpisz np. „126,50 Biedronka spożywcze karta”.', true); return null; }
+  if(typeof VoiceParse==='undefined' || typeof TxCore==='undefined'){ setVoiceStatus('Nie wczytano modułu głosowego — odśwież stronę.', true); return null; }
+  if(txEditIdx!=null){ setVoiceStatus('Najpierw zapisz albo anuluj edycję wpisu.', true); return null; }
+  const p=VoiceParse.parseVoiceExpense(text, { categories: EXP_CATS, merchantKeywords: (typeof CAT_KW!=='undefined' ? CAT_KW : null) });
+  const v=voiceFormValues(p);
+  const typeEl=document.getElementById('q-type');
+  if(typeEl){ typeEl.value=v.type; quickTypeChange(); }
+  const catEl=document.getElementById('q-cat');
+  if(catEl && v.cat && [...catEl.options].some(o=>o.value===v.cat)) catEl.value=v.cat;
+  const set=(id,val)=>{ const el=document.getElementById(id); if(el && val) el.value=val; };
+  const nameEl=document.getElementById('q-name'); if(nameEl) nameEl.value=v.name;
+  const amtEl=document.getElementById('q-amt'); if(amtEl) amtEl.value=v.amt;
+  set('q-date', v.date);
+  set('q-month', v.month);
+  if(typeof syncQuickRecurringFromName==='function') syncQuickRecurringFromName();
+
+  const problems=[];
+  const missing=p.missing.filter(f=>f!=='paymentSource');
+  if(missing.length) problems.push('brak '+missing.map(f=>VOICE_FIELD_PL[f]).join(', '));
+  if(v.dateError) problems.push(v.dateError==='future_date' ? 'data z przyszłości' : 'nie rozpoznano daty');
+  let dupNote='';
+  if(!missing.length && !v.dateError){
+    const chk=TxCore.normalizeExpense({ amount:p.amount, merchant:p.merchant, category:p.category, date:v.iso,
+      paymentSource:p.paymentSource||'bank' }, { requireExternalId:false, categories: EXP_CATS, makeId:()=>0 });
+    if(!chk.ok) problems.push(chk.errors.map(e=>e.message).join(' '));
+    else if(TxCore.findDuplicate(data, chk.tx)) dupNote=' ⚠️ Taki sam wydatek już jest w budżecie — nie dodawaj drugi raz, jeśli to ten sam paragon.';
+  }
+  const srcNote=p.paymentSource ? '' : ' Płatność: przyjąłem kartę — zmień typ na „Wydatek gotówkowy”, jeśli gotówka.';
+  const catNote=p.categoryGuessed ? ' Kategoria dobrana po nazwie.' : '';
+  if(problems.length) setVoiceStatus('Uzupełnij: '+problems.join('; ')+'.'+srcNote, true);
+  else if(dupNote) setVoiceStatus(dupNote.trim()+' Sprawdź pola przed „Dodaj transakcję”.'+catNote+srcNote, true);
+  else setVoiceStatus('✓ Sprawdź pola i kliknij „Dodaj transakcję”.'+catNote+srcNote, false);
+  return { parsed:p, values:v, problems, duplicate: !!dupNote };
+}
+
+let voiceRec=null;
+function voiceListen(){
+  const SR=window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn=document.getElementById('q-voice-mic');
+  const input=document.getElementById('q-voice-text');
+  if(!SR){
+    setVoiceStatus('Ta przeglądarka nie rozpoznaje mowy. Kliknij pole obok i użyj mikrofonu na klawiaturze telefonu, potem „Wypełnij”.', true);
+    if(input) input.focus();
+    return;
+  }
+  if(voiceRec){ try{ voiceRec.stop(); }catch(e){} return; }
+  const rec=new SR();
+  rec.lang='pl-PL';
+  rec.interimResults=false;
+  rec.maxAlternatives=1;
+  voiceRec=rec;
+  if(btn){ btn.classList.add('listening'); btn.textContent='⏹'; }
+  setVoiceStatus('🎤 Słucham… powiedz np. „126,50 Biedronka spożywcze karta”.');
+  rec.onresult=e=>{
+    const t=(e.results && e.results[0] && e.results[0][0] && e.results[0][0].transcript) || '';
+    if(input) input.value=t;
+    voiceFillQuickAdd(t);
+  };
+  rec.onerror=e=>{
+    const map={'not-allowed':'Brak zgody na mikrofon — zezwól w ustawieniach przeglądarki.','service-not-allowed':'Brak zgody na mikrofon — zezwól w ustawieniach przeglądarki.','no-speech':'Nic nie usłyszałem — spróbuj jeszcze raz.','audio-capture':'Nie znaleziono mikrofonu.','network':'Rozpoznawanie mowy wymaga internetu.'};
+    setVoiceStatus(map[e.error] || ('Błąd rozpoznawania mowy: '+e.error), true);
+  };
+  rec.onend=()=>{
+    voiceRec=null;
+    if(btn){ btn.classList.remove('listening'); btn.textContent='🎤'; }
+  };
+  try{ rec.start(); }
+  catch(e){ rec.onend(); setVoiceStatus('Nie udało się włączyć mikrofonu.', true); }
 }
 
 function isImageFile(f){
