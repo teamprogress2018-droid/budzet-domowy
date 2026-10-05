@@ -32,7 +32,8 @@ function voice(extra) {
 
 // ── Wczytanie w przeglądarce i zgodność z index.html ──
 ok('index loads tx-core before inline script',
-  /<script src="tx-core\.js"><\/script>\s*<script>/.test(html) &&
+  html.indexOf('<script src="tx-core.js"></script>') > 0 &&
+  html.indexOf('<script src="tx-core.js"></script>') < html.indexOf('<script>\n') &&
   html.indexOf('src="tx-core.js"') < html.indexOf('const EXP_CATS_PERSONAL'));
 const browser = { self: {} };
 browser.self = browser;

@@ -174,6 +174,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .btn-danger:hover{background:var(--red-bg)}
 .fstatus{font-size:12px;color:var(--green);margin-left:4px}
 .fstatus.err{color:var(--red)}
+.voice-row{display:flex;gap:8px;align-items:stretch}
+.voice-row input{flex:1;min-width:0}
+.voice-row .btn-s{padding:8px 12px;white-space:nowrap}
+.voice-row .btn-s.listening{background:var(--red);border-color:var(--red);color:#fff}
+.voice-undo{padding:2px 10px;font-size:12px;margin-left:6px}
 .chk{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--text2);margin:2px 0 8px;cursor:pointer;line-height:1.45}
 .chk input{width:16px;height:16px;margin-top:1px;flex-shrink:0;accent-color:var(--accent)}
 .chk small{display:block;font-size:11px;color:var(--text3);font-weight:400}
@@ -909,6 +914,18 @@ body.sched-dragging{touch-action:none;user-select:none}
   <!-- QUICK ADD -->
   <div class="card form-card" style="margin-bottom:16px">
     <div class="sec-lbl">⚡ Szybkie dodanie</div>
+    <div class="frow f1">
+      <div class="fg">
+        <label>🎤 Głosowo albo jednym zdaniem</label>
+        <div class="voice-row">
+          <input type="text" id="q-voice-text" autocomplete="off" placeholder="np. 126,50 Biedronka karta · trening Kowalski 120 gotówka" onkeydown="if(event.key==='Enter'){event.preventDefault();voiceFillQuickAdd();}">
+          <button type="button" class="btn-s" id="q-voice-mic" onclick="voiceListen()" title="Podyktuj wydatek" aria-label="Podyktuj wydatek">🎤</button>
+          <button type="button" class="btn-s" onclick="voiceFillQuickAdd()">Wypełnij</button>
+        </div>
+        <label class="chk" style="margin-top:6px"><input type="checkbox" id="q-voice-auto" checked onchange="voiceSetAuto(this.checked)"><span>Zapisuj od razu<small>Pełna komenda zapisze się sama (z przyciskiem „Cofnij”). Gdy czegoś brakuje, stała opłata albo duplikat — wypełni formularz do zatwierdzenia.</small></span></label>
+        <span class="fstatus" id="q-voice-status"></span>
+      </div>
+    </div>
     <div class="frow f3">
       <div class="fg">
         <label>Typ</label>
@@ -1167,6 +1184,7 @@ body.sched-dragging{touch-action:none;user-select:none}
 </div>
 
 <script src="tx-core.js"></script>
+<script src="voice-parse.js"></script>
 <script>
 // ═══════════════════════════════════════════════════
 // KATEGORIE I KOLORY
@@ -1545,7 +1563,7 @@ function goPage(p){
   const idx = pages.indexOf(p);
   if(idx>=0) nb[idx].classList.add('active');
   curPage=p;
-  if(p==='add'){ syncAddMonthField(); bindImportDrop(); }
+  if(p==='add'){ syncAddMonthField(); bindImportDrop(); if(typeof voiceInitAutoToggle==='function') voiceInitAutoToggle(); }
   if(p==='schedule') bindSchedCalImport();
   renderPage();
 }
@@ -1658,6 +1676,7 @@ function setTxEditUi(on){
 }
 function cancelTxEdit(){
   txEditIdx=null;
+  if(typeof quickSrcOverride!=='undefined') quickSrcOverride=null;
   setTxEditUi(false);
   const name=document.getElementById('q-name');
   const amt=document.getElementById('q-amt');
@@ -4160,6 +4179,7 @@ function renderStats(){
 // QUICK ADD
 // ═══════════════════════════════════════════════════
 function quickTypeChange(){
+  quickSrcOverride=null;
   const type = document.getElementById('q-type').value;
   const cats = TYPE_CATS[type]||EXP_CATS_PERSONAL;
   const sel = document.getElementById('q-cat');
@@ -4242,6 +4262,8 @@ function parseTxDateFields(dateStr, monthStr){
   };
 }
 
+// Ustawiane tylko przez wpis głosowy: trening/wynagrodzenie zapłacone gotówką.
+let quickSrcOverride=null;
 function doQuickAdd(){
   const type = document.getElementById('q-type').value;
   const name = document.getElementById('q-name').value.trim();
@@ -4264,7 +4286,8 @@ function doQuickAdd(){
   if(isInc && signed<0) signed=Math.abs(signed);
   signed=round2(signed);
 
-  const src = isCashType ? 'cash' : 'bank';
+  const src = isCashType ? 'cash' : ((quickSrcOverride==='cash' && (type==='training'||type==='salary')) ? 'cash' : 'bank');
+  quickSrcOverride=null;
   const viewing=curMonth;
   let resolvedCat = cat;
   if(!isInc && isZusLikeName(name)) resolvedCat = FIRM_RUN_CAT;
@@ -4312,6 +4335,176 @@ function doQuickAdd(){
   statusEl.className='fstatus';
   setTimeout(()=>{ if(statusEl.textContent.startsWith('✓')) statusEl.textContent=''; },4000);
   renderPage();
+}
+
+// ═══════════════════════════════════════════════════
+// GŁOSOWE / JEDNYM ZDANIEM — tylko wypełnia formularz, zapis robi „Dodaj transakcję”
+// ═══════════════════════════════════════════════════
+const VOICE_TYPE_BY_KIND={
+  expense:  src=>src==='cash'?'cash-exp':'expense',
+  income:   src=>src==='cash'?'cash-inc':'income',
+  salary:   ()=>'salary',
+  training: ()=>'training'
+};
+function voiceFormValues(p){
+  if(!p) return null;
+  const kind=VOICE_TYPE_BY_KIND[p.kind] ? p.kind : 'expense';
+  const isInc=kind!=='expense';
+  const v={ kind, type: VOICE_TYPE_BY_KIND[kind](p.paymentSource), name: p.merchant||'', amt:'', cat: p.category||'', date:'', month:'',
+    srcOverride: (kind==='training'||kind==='salary') && p.paymentSource==='cash' ? 'cash' : null,
+    recurring: !isInc && !!p.recurring };
+  if(kind==='income') v.cat = v.type==='cash-inc' ? 'Przychód gotówkowy' : 'Przychód bankowy';
+  if(p.amount!=null && isFinite(p.amount)) v.amt=round2(Math.abs(p.amount)).toFixed(2).replace('.',',');
+  const d=(typeof TxCore!=='undefined') ? TxCore.parseDate(p.date) : null;
+  if(d && d.iso){
+    const [y,m,dd]=d.iso.split('-');
+    v.date=dd+'.'+m+'.'+y;
+    v.month=MONTHS_PL[parseInt(m,10)-1]+' '+y;
+    v.iso=d.iso;
+    v.shortDate=dd+'.'+m;
+  } else v.dateError=(d && d.error)||'invalid_date';
+  return v;
+}
+
+const VOICE_FIELD_PL={amount:'kwoty',merchant:'nazwy',category:'kategorii',paymentSource:'płatności (gotówka/karta)'};
+const VOICE_KIND_PL={expense:'wydatek',income:'przychód',salary:'wynagrodzenie',training:'trening'};
+
+function voiceAutoEnabled(){
+  try{ return localStorage.getItem('budzet_voice_auto')!=='0'; }catch(e){ return true; }
+}
+function voiceSetAuto(on){
+  try{ localStorage.setItem('budzet_voice_auto', on?'1':'0'); }catch(e){}
+}
+function voiceInitAutoToggle(){
+  const el=document.getElementById('q-voice-auto');
+  if(el) el.checked=voiceAutoEnabled();
+}
+
+function setVoiceStatus(text, isErr, undoId){
+  const el=document.getElementById('q-voice-status');
+  if(!el) return;
+  el.className='fstatus'+(isErr?' err':'');
+  el.textContent=text;
+  if(undoId!=null){
+    const b=document.createElement('button');
+    b.type='button'; b.className='btn-s voice-undo'; b.textContent='Cofnij';
+    b.onclick=()=>voiceUndo(undoId);
+    el.appendChild(document.createTextNode(' '));
+    el.appendChild(b);
+  }
+}
+
+// Cofnięcie zwykłą ścieżką usuwania (z potwierdzeniem, cofnięciem spłaty długu itd.).
+function voiceUndo(id){
+  const idx=data.findIndex(t=>t && t.id===id);
+  if(idx<0){ setVoiceStatus('Tego wpisu już nie ma.', true); return; }
+  const before=data.length;
+  delTx(idx);
+  if(data.length<before) setVoiceStatus('↩ Cofnięto ostatni wpis głosowy.');
+}
+
+// Analiza zdania → wypełnienie formularza → (opcjonalnie) zapis zwykłym doQuickAdd().
+function voiceFillQuickAdd(textArg, opts){
+  const o=opts||{};
+  const input=document.getElementById('q-voice-text');
+  const text=String(textArg!=null ? textArg : (input && input.value) || '').trim();
+  if(!text){ setVoiceStatus('Powiedz albo wpisz np. „126,50 Biedronka spożywcze karta”.', true); return null; }
+  if(typeof VoiceParse==='undefined' || typeof TxCore==='undefined'){ setVoiceStatus('Nie wczytano modułu głosowego — odśwież stronę.', true); return null; }
+  if(txEditIdx!=null){ setVoiceStatus('Najpierw zapisz albo anuluj edycję wpisu.', true); return null; }
+  const p=VoiceParse.parseVoiceExpense(text, { categories: EXP_CATS, merchantKeywords: (typeof CAT_KW!=='undefined' ? CAT_KW : null) });
+  const v=voiceFormValues(p);
+  const typeEl=document.getElementById('q-type');
+  if(typeEl){ typeEl.value=v.type; quickTypeChange(); }
+  quickSrcOverride=v.srcOverride;
+  const catEl=document.getElementById('q-cat');
+  if(catEl && v.cat && [...catEl.options].some(x=>x.value===v.cat)) catEl.value=v.cat;
+  const set=(id,val)=>{ const el=document.getElementById(id); if(el && val) el.value=val; };
+  const nameEl=document.getElementById('q-name'); if(nameEl) nameEl.value=v.name;
+  const amtEl=document.getElementById('q-amt'); if(amtEl) amtEl.value=v.amt;
+  set('q-date', v.date);
+  set('q-month', v.month);
+  if(typeof syncQuickRecurringFromName==='function') syncQuickRecurringFromName();
+  const recEl=document.getElementById('q-recurring');
+  if(recEl && v.recurring) recEl.checked=true;
+
+  // ── kontrola ──
+  const isExp=v.kind==='expense';
+  const problems=[];
+  const missing=p.missing.filter(f=>f!=='paymentSource' && (isExp || f==='amount'));
+  if(missing.length) problems.push('brak '+missing.map(f=>VOICE_FIELD_PL[f]).join(', '));
+  if(v.dateError) problems.push(v.dateError==='future_date' ? 'data z przyszłości' : 'nie rozpoznano daty');
+  let dup=false;
+  if(!missing.length && !v.dateError){
+    if(isExp){
+      const chk=TxCore.normalizeExpense({ amount:p.amount, merchant:p.merchant, category:p.category, date:v.iso,
+        paymentSource:p.paymentSource||'bank' }, { requireExternalId:false, categories: EXP_CATS, makeId:()=>0 });
+      if(!chk.ok) problems.push(chk.errors.map(e=>e.message).join(' '));
+      else dup=!!TxCore.findDuplicate(data, chk.tx);
+    } else {
+      const amt=round2(Math.abs(p.amount));
+      if(!(amt>0)) problems.push('kwota musi być większa od zera');
+      else if(amt>MAX_TX_AMT) problems.push('kwota jest za duża');
+      else dup=!!TxCore.findDuplicate(data, { month:v.month, date:v.shortDate, name:v.name, amt });
+    }
+  }
+
+  const label=VOICE_KIND_PL[v.kind]+': '+(v.name||'?')+' '+(v.amt?((isExp?'−':'+')+v.amt+' zł'):'')+(v.recurring?' · co miesiąc':'');
+  const srcNote=(!p.paymentSource && v.kind!=='salary') ? ' Płatność nie padła — przyjąłem kartę/przelew.' : '';
+  const catNote=p.categoryGuessed ? ' Kategoria dobrana po nazwie.' : '';
+  if(problems.length){ setVoiceStatus('Uzupełnij ('+label+'): '+problems.join('; ')+'.'+srcNote, true); return { parsed:p, values:v, problems, duplicate:dup, saved:false }; }
+  if(dup){ setVoiceStatus('⚠️ Taki sam wpis już jest w budżecie — nie zapisałem. Jeśli to drugi taki sam, sprawdź pola i kliknij „Dodaj transakcję”.', true); return { parsed:p, values:v, problems, duplicate:true, saved:false }; }
+
+  // Pełny zapis tylko gdy: auto włączone, płatność powiedziana (poza wynagrodzeniem), nie jest to stała opłata.
+  const auto = o.auto!=null ? o.auto : voiceAutoEnabled();
+  const autoRecurringName = v.kind==='expense' && typeof looksLikeRecurringExpenseName==='function' && looksLikeRecurringExpenseName(v.name);
+  const canAuto = auto && !v.recurring && !autoRecurringName && (p.paymentSource || v.kind==='salary');
+  if(!canAuto){
+    const why = (v.recurring||autoRecurringName) ? ' Stałą opłatę zatwierdź ręcznie — doda się też w kolejnych miesiącach.' : '';
+    setVoiceStatus('✓ Rozpoznano '+label+'. Sprawdź i kliknij „Dodaj transakcję”.'+why+catNote+srcNote, false);
+    return { parsed:p, values:v, problems, duplicate:false, saved:false };
+  }
+  const before=data.length;
+  doQuickAdd();
+  const added=data.length>before ? data[data.length-1] : null;
+  if(!added){ setVoiceStatus('Nie zapisano ('+label+') — sprawdź komunikat pod formularzem.', true); return { parsed:p, values:v, problems, duplicate:false, saved:false }; }
+  if(input) input.value='';
+  setVoiceStatus('✓ Zapisano '+label+' · '+v.month+'.'+catNote, false, added.id);
+  return { parsed:p, values:v, problems, duplicate:false, saved:true, tx:added };
+}
+
+let voiceRec=null;
+function voiceListen(){
+  const SR=window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn=document.getElementById('q-voice-mic');
+  const input=document.getElementById('q-voice-text');
+  if(!SR){
+    setVoiceStatus('Ta przeglądarka nie rozpoznaje mowy. Kliknij pole obok i użyj mikrofonu na klawiaturze telefonu, potem „Wypełnij”.', true);
+    if(input) input.focus();
+    return;
+  }
+  if(voiceRec){ try{ voiceRec.stop(); }catch(e){} return; }
+  const rec=new SR();
+  rec.lang='pl-PL';
+  rec.interimResults=false;
+  rec.maxAlternatives=1;
+  voiceRec=rec;
+  if(btn){ btn.classList.add('listening'); btn.textContent='⏹'; }
+  setVoiceStatus('🎤 Słucham… powiedz np. „126,50 Biedronka spożywcze karta”.');
+  rec.onresult=e=>{
+    const t=(e.results && e.results[0] && e.results[0][0] && e.results[0][0].transcript) || '';
+    if(input) input.value=t;
+    voiceFillQuickAdd(t);
+  };
+  rec.onerror=e=>{
+    const map={'not-allowed':'Brak zgody na mikrofon — zezwól w ustawieniach przeglądarki.','service-not-allowed':'Brak zgody na mikrofon — zezwól w ustawieniach przeglądarki.','no-speech':'Nic nie usłyszałem — spróbuj jeszcze raz.','audio-capture':'Nie znaleziono mikrofonu.','network':'Rozpoznawanie mowy wymaga internetu.'};
+    setVoiceStatus(map[e.error] || ('Błąd rozpoznawania mowy: '+e.error), true);
+  };
+  rec.onend=()=>{
+    voiceRec=null;
+    if(btn){ btn.classList.remove('listening'); btn.textContent='🎤'; }
+  };
+  try{ rec.start(); }
+  catch(e){ rec.onend(); setVoiceStatus('Nie udało się włączyć mikrofonu.', true); }
 }
 
 function isImageFile(f){
