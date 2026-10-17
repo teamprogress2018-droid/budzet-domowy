@@ -125,7 +125,13 @@ async function fbSyncFromCloud(){
       if(curPage==='schedule' && typeof renderSchedule==='function') renderSchedule();
       if(curPage==='income' && typeof renderIncome==='function') renderIncome();
     }
-    fbSetStatus('✓ Zsynchronizowano · ' + fbCurrentUser.email);
+    const progressImport=typeof window.pullProgressLiveIncomeQueue==='function'
+      ? window.pullProgressLiveIncomeQueue()
+      : {imported:0};
+    if(typeof window.startProgressLiveIncomeBridge==='function') window.startProgressLiveIncomeBridge();
+    fbSetStatus(progressImport.imported
+      ? '✓ Dodano z Progress Live: '+progressImport.imported+' · zapisano w chmurze'
+      : '✓ Zsynchronizowano · ' + fbCurrentUser.email);
     fbPushBudget();
   } catch(e) {
     console.warn('Synchronizacja z chmury nieudana:', e.message);
