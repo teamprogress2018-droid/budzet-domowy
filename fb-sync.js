@@ -55,6 +55,11 @@ function fbFriendlyError(code){
 
 function fbDoLogout(){
   if(!confirm('Na pewno się wylogować?')) return;
+  const clearLocal=confirm('To urządzenie może być współdzielone. Usunąć lokalną kopię budżetu z tej przeglądarki?\n\nOK = usuń lokalne dane po wylogowaniu\nAnuluj = zachowaj lokalną kopię na tym urządzeniu');
+  if(clearLocal){
+    const keys=['budzet_v3','budzet_subs','budzet_holdings','budzet_limits','budzet_goals','budzet_env','budzet_debts','budzet_impulse','budzet_advisor_chat','budzet_theme','budzet_debt_strategy','budzet_cur_month','budzet_updated_at','budzet_advisor_consent'];
+    keys.forEach(k=>localStorage.removeItem(k));
+  }
   fbAuth.signOut();
 }
 
@@ -185,7 +190,8 @@ async function fbPushBudgetNow(){
     ownerUid: fbCurrentUser.uid,
     budgetJson: JSON.stringify(list),
     budgetTxCount: Array.isArray(list) ? list.length : 0,
-    budgetUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    budgetUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    budgetClientUpdatedAt: Number(localStorage.getItem('budzet_updated_at')) || Date.now()
   };
   try {
     await fbDb.collection('holdings').doc(fbCurrentUser.uid).set(
@@ -213,10 +219,16 @@ function fbApplyCloudBudget(hd){
   let local = null;
   try { local = JSON.parse(localStorage.getItem('budzet_v3')||'null'); } catch(e){}
   const localDemo = fbIsDemoBudget(local);
-  const cloudN = Array.isArray(cloudList) ? cloudList.length : 0;
-  const localN = Array.isArray(local) ? local.length : 0;
-  if(!localDemo && localN >= cloudN) return false;
+  const cloudUpdated=Number(hd.budgetClientUpdatedAt)||0;
+  const localUpdated=Number(localStorage.getItem('budzet_updated_at'))||0;
+  // Realne dane lokalne nigdy nie są automatycznie nadpisywane wyłącznie
+  // przez większą lub nowszą listę z drugiego urządzenia.
+  if(!localDemo){
+    if(cloudUpdated>localUpdated) fbSetStatus('⚠️ W chmurze jest nowsza kopia. Nie nadpisano danych lokalnych — porównaj kopie przed przywróceniem.', true);
+    return false;
+  }
   localStorage.setItem('budzet_v3', hd.budgetJson);
+  localStorage.setItem('budzet_updated_at', String(cloudUpdated || Date.now()));
   fbWriteBudgetExtras(hd.budgetExtras);
   fbSetStatus('✓ Przywrócono budżet z chmury');
   location.reload();
